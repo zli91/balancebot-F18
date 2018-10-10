@@ -1,0 +1,10 @@
+struct balancebot_msg_t
+{
+    
+    int64_t utime;
+
+    pose_xyt_t pose;
+    int16_t num_gates;
+    balancebot_gate_t gates[num_gates];
+
+}

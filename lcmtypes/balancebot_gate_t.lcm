@@ -1,0 +1,5 @@
+struct balancebot_gate_t
+{
+    float left_post[2];  //  left gate post (x,y)
+    float right_post[2]; // right gate post (x,y)
+}

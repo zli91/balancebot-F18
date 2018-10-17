@@ -1,2 +1,3 @@
 motor = 98.7g
 wheel = 26.9g
+wheel radius = 40mm

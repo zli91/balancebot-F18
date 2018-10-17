@@ -1,4 +1,5 @@
 all:                                                         
+	@make -C lcmtypes
 	@make -C balancebot --no-print-directory
 	@make -C measure_motors --no-print-directory
 	@make -C test_motors --no-print-directory                                                       

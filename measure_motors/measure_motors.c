@@ -66,9 +66,20 @@ int main(){
 
     rc_set_state(RUNNING);
     while(rc_get_state()!=EXITING){
-    	rc_nanosleep(1E9);
+        mb_motor_init();
+        int count = 0;
+        mb_motor_set(1, -0.2);
+        while(1){
+            count = rc_encoder_eqep_read(1);
+            printf("i: %d\n",count);
+            rc_nanosleep(5E6);
+            if(count > 979.2){
+                mb_motor_brake(1);
+                break;
+            }
+        }
+        rc_set_state(EXITING);
     }
-
 	// exit cleanly
 	rc_encoder_eqep_cleanup();
 	rc_remove_pid_file();   // remove pid file LAST

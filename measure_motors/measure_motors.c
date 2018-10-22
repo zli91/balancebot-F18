@@ -17,6 +17,7 @@
 #include <rc/encoder_eqep.h>
 #include <rc/adc.h>
 #include <rc/time.h>
+#include <rc/mpu.h>
 #include "../common/mb_motor.h"
 
 FILE* f1;
@@ -68,16 +69,66 @@ int main(){
     while(rc_get_state()!=EXITING){
         mb_motor_init();
         int count = 0;
-        mb_motor_set(1, -0.2);
+        double current = 0;
+        rc_mpu_config_t mpu_config = rc_mpu_default_config();
+        rc_mpu_data_t* rc_mpu_data = malloc(sizeof(*rc_mpu_data));
+        mpu_config.dmp_sample_rate = 100;
+	    mpu_config.orient = ORIENTATION_Z_UP;
+        //rc_mpu_calibrate_gyro_routine(mpu_config);
+        //rc_mpu_calibrate_accel_routine(mpu_config);
+        if (rc_mpu_initialize_dmp(rc_mpu_data, mpu_config)==-1) printf("Initialization Failed.\n");
+        rc_nanosleep(1E8);
+        for(count=0;count<10;count++){
+            
+            printf("acceleration: %f\t%f\t%f\n",rc_mpu_data->dmp_TaitBryan[0],rc_mpu_data->dmp_TaitBryan[1],rc_mpu_data->dmp_TaitBryan[2]);
+            
+            printf("gyro: %f\t%f\t%f\n",rc_mpu_data->gyro[0],rc_mpu_data->gyro[1],rc_mpu_data->gyro[2]);
+            rc_nanosleep(1E9);
+        }
+        rc_mpu_power_off();
+        free(rc_mpu_data);
+        /* test K
+        mb_motor_set(1, -1.0);
         while(1){
             count = rc_encoder_eqep_read(1);
-            printf("i: %d\n",count);
-            rc_nanosleep(5E6);
-            if(count > 979.2){
+            current = mb_motor_read_current(1);
+            printf("%d\t%f\n",count,current);
+            rc_nanosleep(1E7);
+            if(count > 3000 || count < -3000){
+                mb_motor_brake(1);
+                break;
+            }
+        }*/
+        /* test c (static friction)
+        int i = 0, count2 = 0;
+        for(i = 0;i<100;i++){
+            mb_motor_set(1, i*0.01);
+            current = mb_motor_read_current(1);
+            count = -rc_encoder_eqep_read(1);
+            rc_nanosleep(1E7);
+            count2 = -rc_encoder_eqep_read(1);
+            rc_nanosleep(1E7);
+            printf("%f\n",current);
+            if(count2-count>=5){
                 mb_motor_brake(1);
                 break;
             }
         }
+        */
+        /* test I_M
+        mb_motor_set(1, -1.0);
+        while(1){
+            count = rc_encoder_eqep_read(1);
+            current = mb_motor_read_current(1);
+            printf("%d\t%f\n",count,current);
+            rc_nanosleep(1E7);
+            if(count > 1000 || count < -1000){
+                mb_motor_brake(1);
+                break;
+            }
+        }
+        */
+        
         rc_set_state(EXITING);
     }
 	// exit cleanly

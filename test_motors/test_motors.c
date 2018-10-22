@@ -72,12 +72,12 @@ int main(){
 			mb_motor_brake(0);
 			//run left backwards for 1s
 			mb_motor_set(RIGHT_MOTOR, 0.0);
-			mb_motor_set(LEFT_MOTOR, -0.9);
+			mb_motor_set(LEFT_MOTOR, -0.8);
 			printf("Right motor current: %f\n",mb_motor_read_current(RIGHT_MOTOR));
 			printf("Left motor current: %f\n",mb_motor_read_current(LEFT_MOTOR));
 			rc_nanosleep(1E9);
 			//run right backwards for 1s
-			mb_motor_set(RIGHT_MOTOR, -0.4);
+			mb_motor_set(RIGHT_MOTOR, -0.8);
 			mb_motor_set(LEFT_MOTOR, 0.0);
 			printf("Right motor current: %f\n",mb_motor_read_current(RIGHT_MOTOR));
 			printf("Left motor current: %f\n",mb_motor_read_current(LEFT_MOTOR));

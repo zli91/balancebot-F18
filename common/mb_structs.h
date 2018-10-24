@@ -1,6 +1,14 @@
 #ifndef MB_STRUCTS_H
 #define MB_STRUCTS_H
 
+typedef struct mb_setpoints mb_setpoints_t;
+struct mb_setpoints{
+
+    float fwd_velocity; // fwd velocity in m/s
+    float turn_velocity; // turn velocity in rad/s
+    int manual_ctl;
+};
+
 typedef struct mb_state mb_state_t;
 struct mb_state{
     // raw sensor inputs
@@ -38,13 +46,6 @@ struct mb_state{
     mb_setpoints_t* setpoint;
 };
 
-typedef struct mb_setpoints mb_setpoints_t;
-struct mb_setpoints{
-
-    float fwd_velocity; // fwd velocity in m/s
-    float turn_velocity; // turn velocity in rad/s
-    int manual_ctl;
-};
 
 typedef struct mb_odometry mb_odometry_t;
 struct mb_odometry{

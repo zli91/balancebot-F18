@@ -102,7 +102,7 @@ int main(){
 
 	//attach controller function to IMU interrupt
 	printf("initializing controller...\n");
-	mb_controller_init();
+	mb_controller_init(&mb_state);
 
 	printf("initializing motors...\n");
 	mb_motor_init();
@@ -157,9 +157,9 @@ void balancebot_controller(){
 	pthread_mutex_lock(&state_mutex);
 	// Read IMU
 	float theta_raw = mpu_data.dmp_TaitBryan[TB_PITCH_X];
-	if(theta_raw >= 0) theta_raw -= 180;
-	else theta_raw += 180;
-	mb_state.theta = theta_raw * DEG_TO_RAD;
+	if(theta_raw >= 0) theta_raw -= 180*DEG_TO_RAD;
+	else theta_raw += 180*DEG_TO_RAD;
+	mb_state.theta = theta_raw;
 	// Read encoders
 	mb_state.left_encoder = rc_encoder_eqep_read(1);
 	mb_state.right_encoder = rc_encoder_eqep_read(2);
@@ -168,8 +168,9 @@ void balancebot_controller(){
 
     // Calculate controller outputs
     mb_controller_update(&mb_state);
-	
-    if(!mb_setpoints.manual_ctl){
+	mb_motor_set_all(mb_state.left_cmd);
+    
+	if(!mb_setpoints.manual_ctl){
     	//send motor commands
    	}
 

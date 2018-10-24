@@ -156,7 +156,10 @@ void balancebot_controller(){
 	//lock state mutex
 	pthread_mutex_lock(&state_mutex);
 	// Read IMU
-	mb_state.theta = mpu_data.dmp_TaitBryan[TB_PITCH_X];
+	float theta_raw = mpu_data.dmp_TaitBryan[TB_PITCH_X];
+	if(theta_raw >= 0) theta_raw -= 180;
+	else theta_raw += 180;
+	mb_state.theta = theta_raw * DEG_TO_RAD;
 	// Read encoders
 	mb_state.left_encoder = rc_encoder_eqep_read(1);
 	mb_state.right_encoder = rc_encoder_eqep_read(2);
@@ -164,7 +167,8 @@ void balancebot_controller(){
  
 
     // Calculate controller outputs
-    
+    mb_controller_update(&mb_state);
+	
     if(!mb_setpoints.manual_ctl){
     	//send motor commands
    	}

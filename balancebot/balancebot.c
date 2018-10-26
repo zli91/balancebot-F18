@@ -25,6 +25,14 @@
 * int main() 
 *
 *******************************************************************************/
+double KP1 = -5.5;
+double KI1 = -66.59;
+double KD1 = -0.45;
+
+double KP2 = -5.5;
+double KI2 = -66.59;
+double KD2 = -0.45;
+
 int main(){
 	// make sure another instance isn't running
     // if return value is -3 then a background process is running with
@@ -86,7 +94,8 @@ int main(){
 	// set up mpu configuration
 	rc_mpu_config_t mpu_config = rc_mpu_default_config();
 	mpu_config.dmp_sample_rate = SAMPLE_RATE_HZ;
-	mpu_config.orient = ORIENTATION_Z_UP;
+	mpu_config.orient = ORIENTATION_Z_DOWN;
+
 
 	// now set up the imu for dmp interrupt operation
 	if(rc_mpu_initialize_dmp(&mpu_data, mpu_config)){
@@ -152,24 +161,33 @@ int main(){
 *
 *******************************************************************************/
 void balancebot_controller(){
-
+	// wheel radius
+	float radius = 0.04; //meter
 	//lock state mutex
 	pthread_mutex_lock(&state_mutex);
 	// Read IMU
-	float theta_raw = mpu_data.dmp_TaitBryan[TB_PITCH_X];
-	if(theta_raw >= 0) theta_raw -= 180*DEG_TO_RAD;
-	else theta_raw += 180*DEG_TO_RAD;
-	mb_state.theta = theta_raw;
+	mb_state.theta = mpu_data.dmp_TaitBryan[TB_PITCH_X];
 	// Read encoders
-	mb_state.left_encoder = rc_encoder_eqep_read(1);
-	mb_state.right_encoder = rc_encoder_eqep_read(2);
+	int prev_left_encoder = mb_state.left_encoder;
+	int prev_right_encoder = mb_state.right_encoder;
+	mb_state.left_encoder = rc_encoder_eqep_read(2);
+	mb_state.right_encoder = rc_encoder_eqep_read(1);
+	
+	// convert velocity to phi
+	float vel = mb_setpoints.fwd_velocity;
+	float dt = 1/SAMPLE_RATE_HZ;
+	mb_setpoints.phi_r = mb_setpoints.phi_old + vel*dt/(radius);
+	mb_setpoints.phi_old = mb_setpoints.phi_r;
+	
+	
+	
     // Update odometry 
  
 
     // Calculate controller outputs
-    mb_controller_update(&mb_state);
+    mb_controller_update(&mb_state,KP1,KI1,KD1,KP2,KI2,KD2);
 	mb_motor_set_all(mb_state.left_cmd);
-    
+    printf("Kp1: %0.2f\tKi1: %0.2f\tKd1: %0.2f\tKp2: %0.2f\tKi2: %0.2f\tKd2: %0.2f\n",KP1,KI1,KD1,KP2,KI2,KD2);
 	if(!mb_setpoints.manual_ctl){
     	//send motor commands
    	}
@@ -199,6 +217,15 @@ void* setpoint_control_loop(void* ptr){
 				// TODO: Handle the DSM data from the Spektrum radio reciever
 				// You may should implement switching between manual and autonomous mode
 				// using channel 5 of the DSM data.
+			if(rc_dsm_ch_normalized(5)<=0.6){
+				KP1 = KP1 + 0.1 * rc_dsm_ch_normalized(2);
+				KI1 = KI1 + 0.01 * rc_dsm_ch_normalized(1);
+				KD1 = KD1 + 0.01* rc_dsm_ch_normalized(3);
+			}else{
+				KP2 = KP2 + 0.1 * rc_dsm_ch_normalized(2);
+				KI2 = KI2 + 0.01 * rc_dsm_ch_normalized(1);
+				KD2 = KD2 + 0.01* rc_dsm_ch_normalized(3);
+			}
 		}
 	 	rc_nanosleep(1E9 / RC_CTL_HZ);
 	}

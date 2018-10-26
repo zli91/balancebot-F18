@@ -7,6 +7,8 @@ struct mb_setpoints{
     float fwd_velocity; // fwd velocity in m/s
     float turn_velocity; // turn velocity in rad/s
     int manual_ctl;
+    float phi_old;
+    float phi_r;
 };
 
 typedef struct mb_state mb_state_t;

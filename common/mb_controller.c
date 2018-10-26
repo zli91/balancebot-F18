@@ -20,6 +20,7 @@
 *******************************************************************************/
 
 static rc_filter_t D1 = RC_FILTER_INITIALIZER;
+static rc_filter_t D2 = RC_FILTER_INITIALIZER;
 
 int mb_controller_init(mb_state_t* mb_state){
     mb_controller_load_config();
@@ -29,7 +30,7 @@ int mb_controller_init(mb_state_t* mb_state){
     // double num[3] = {0.1152, -0.2284, 0.1132};
     // double den[3] = {0.1152, -0.2284, 0.1132};
 
-    return rc_filter_pid(&D1, -8.474, /*-44.13*/0.0, -0.1127, 0.06, 0.01);
+    return rc_filter_pid(&D1, -5.474, -66, -0.45, 0.06, 0.01)==0 && rc_filter_pid(&D2, -8.474, /*-44.13*/0.0, -0.1127, 0.06, 0.01)==0;
     // return 0;
 }
 
@@ -67,16 +68,26 @@ int mb_controller_load_config(){
 *
 *******************************************************************************/
 
-int mb_controller_update(mb_state_t* mb_state){
+int mb_controller_update(mb_state_t* mb_state, double Kp1, double Ki1, double Kd1, double Kp2, double Ki2, double Kd2){
     /*TODO: Write your controller here*/
-    float theta_r = 0.0;
+    // Outer loop
+    rc_filter_pid(&D2, Kp2, Ki2, Kd2, 0.06, 0.01);
+    float phi_r = mb_state->setpoint->phi_r;
+    float e_phi = phi_r - mb_state->phi;
+    float theta_r = rc_filter_march(&D2, e_phi);
+    printf("theta_r = %0.3f\n", theta_r);
+    mb_state->phi = mb_state->left_encoder * 2*PI /979.2;
+
+
+    // Inner loop
+    rc_filter_pid(&D1, Kp1, Ki1, Kd1, 0.06, 0.01);
+    // float theta_r = 0.0;
     float e_theta = theta_r - mb_state->theta;
     double duty = rc_filter_march(&D1, e_theta);
-    if (duty < -1.0){
-        duty = -1.0;
-    } else if(duty > 1.0){
-        duty = 1.0;
-    } 
+    //if(duty > 0.0 && duty < 0.35) duty = 0.35;
+    //else if(duty < 0.0 && duty > -0.35) duty = -0.35;    
+    if (duty < -1.0) duty = -1.0;
+    else if(duty > 1.0) duty = 1.0;
     mb_state->left_cmd = duty;
     mb_state->right_cmd = duty;
     printf("duty = %f\n", mb_state->left_cmd);

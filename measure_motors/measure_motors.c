@@ -70,39 +70,29 @@ int main(){
         mb_motor_init();
         int count = 0;
         double current = 0;
-        rc_mpu_config_t mpu_config = rc_mpu_default_config();
-        rc_mpu_data_t* rc_mpu_data = malloc(sizeof(*rc_mpu_data));
-        mpu_config.dmp_sample_rate = 100;
-	    mpu_config.orient = ORIENTATION_Z_UP;
-        //rc_mpu_calibrate_gyro_routine(mpu_config);
-        //rc_mpu_calibrate_accel_routine(mpu_config);
-        if (rc_mpu_initialize_dmp(rc_mpu_data, mpu_config)==-1) printf("Initialization Failed.\n");
-        rc_nanosleep(1E8);
-        for(count=0;count<10;count++){
-            
-            printf("acceleration: %f\t%f\t%f\n",rc_mpu_data->dmp_TaitBryan[0],rc_mpu_data->dmp_TaitBryan[1],rc_mpu_data->dmp_TaitBryan[2]);
-            
-            printf("gyro: %f\t%f\t%f\n",rc_mpu_data->gyro[0],rc_mpu_data->gyro[1],rc_mpu_data->gyro[2]);
-            rc_nanosleep(1E9);
-        }
-        rc_mpu_power_off();
-        free(rc_mpu_data);
-        /* test K
+        /* test K */
         mb_motor_set(1, -1.0);
         while(1){
             count = rc_encoder_eqep_read(1);
             current = mb_motor_read_current(1);
             printf("%d\t%f\n",count,current);
-            rc_nanosleep(1E7);
-            if(count > 3000 || count < -3000){
-                mb_motor_brake(1);
+            rc_nanosleep(5E7);
+            if(count > 5000 || count < -5000){
+                mb_motor_set(1, 0.0);
                 break;
             }
-        }*/
+        }
+        int i = 0;
+        for(i = 0;i<80;i++){
+            count = rc_encoder_eqep_read(1);
+            current = mb_motor_read_current(1);
+            printf("%d\t%f\n",count,current);
+            rc_nanosleep(5E7);
+        }
         /* test c (static friction)
         int i = 0, count2 = 0;
         for(i = 0;i<100;i++){
-            mb_motor_set(1, i*0.01);
+            mb_motor_set(1, i*0.001);
             current = mb_motor_read_current(1);
             count = -rc_encoder_eqep_read(1);
             rc_nanosleep(1E7);
@@ -113,8 +103,8 @@ int main(){
                 mb_motor_brake(1);
                 break;
             }
-        }
-        */
+        }*/
+        
         /* test I_M
         mb_motor_set(1, -1.0);
         while(1){

@@ -25,13 +25,15 @@
 * int main() 
 *
 *******************************************************************************/
-double KP1 = -5.5;
-double KI1 = -66.59;
-double KD1 = -0.45;
+double KP1 = -4.8;
+double KI1 = -14.5;
+double KD1 = -0.03;
 
-double KP2 = -5.5;
-double KI2 = -66.59;
-double KD2 = -0.45;
+double KP2 = 0.00855;//0.02214;
+double KI2 = 0.0152;//0.0009945;
+double KD2 = 0.00864;//0.04473;
+
+double body_offset = -0.0152;
 
 int main(){
 	// make sure another instance isn't running
@@ -130,6 +132,9 @@ int main(){
 	// done initializing so set state to RUNNING
 	rc_set_state(RUNNING); 
 
+	//Initialize
+	mb_setpoints.phi_old = 0;
+
 	// Keep looping until state changes to EXITING
 	while(rc_get_state()!=EXITING){
 
@@ -161,33 +166,34 @@ int main(){
 *
 *******************************************************************************/
 void balancebot_controller(){
-	// wheel radius
-	float radius = 0.04; //meter
+
 	//lock state mutex
 	pthread_mutex_lock(&state_mutex);
 	// Read IMU
-	mb_state.theta = mpu_data.dmp_TaitBryan[TB_PITCH_X];
+	mb_state.theta = mpu_data.dmp_TaitBryan[TB_PITCH_X] - body_offset;
 	// Read encoders
 	int prev_left_encoder = mb_state.left_encoder;
 	int prev_right_encoder = mb_state.right_encoder;
-	mb_state.left_encoder = rc_encoder_eqep_read(2);
+	//mb_state.left_encoder = (-rc_encoder_eqep_read(2)-prev_left_encoder);
+	//mb_state.right_encoder = rc_encoder_eqep_read(1)-prev_right_encoder;
+	mb_state.left_encoder = -rc_encoder_eqep_read(2);
 	mb_state.right_encoder = rc_encoder_eqep_read(1);
-	
-	// convert velocity to phi
-	float vel = mb_setpoints.fwd_velocity;
-	float dt = 1/SAMPLE_RATE_HZ;
-	mb_setpoints.phi_r = mb_setpoints.phi_old + vel*dt/(radius);
-	mb_setpoints.phi_old = mb_setpoints.phi_r;
-	
-	
+	// Average wheel angle
+	mb_state.phi = 0.5*(mb_state.left_encoder + mb_state.right_encoder)/(GEAR_RATIO*ENCODER_RES)*(2*3.14159);
+	// convert command velocity to phi
+    // float vel = mb_setpoints.fwd_velocity;
+    float vel = 0;
+    mb_setpoints.phi_r = mb_setpoints.phi_old + vel*DT/(0.5*WHEEL_DIAMETER);
+    mb_setpoints.phi_old = mb_setpoints.phi_r;
 	
     // Update odometry 
  
 
     // Calculate controller outputs
-    mb_controller_update(&mb_state,KP1,KI1,KD1,KP2,KI2,KD2);
+    float b_vel =  (mb_state.left_encoder - prev_left_encoder)/(GEAR_RATIO*ENCODER_RES)*(2*3.14159)/DT;
+    mb_controller_update(&mb_state,&mb_setpoints,KP1,KI1,KD1,KP2,KI2,KD2);
 	mb_motor_set_all(mb_state.left_cmd);
-    printf("Kp1: %0.2f\tKi1: %0.2f\tKd1: %0.2f\tKp2: %0.2f\tKi2: %0.2f\tKd2: %0.2f\n",KP1,KI1,KD1,KP2,KI2,KD2);
+    printf("Kp1: %0.3f\tKi1: %0.3f\tKd1: %0.3f\tKp2: %0.4f\tKi2: %0.4f\tKd2: %0.4f\tb_vel:%0.4f\n",KP1,KI1,KD1,KP2,KI2,KD2,b_vel);
 	if(!mb_setpoints.manual_ctl){
     	//send motor commands
    	}
@@ -217,14 +223,17 @@ void* setpoint_control_loop(void* ptr){
 				// TODO: Handle the DSM data from the Spektrum radio reciever
 				// You may should implement switching between manual and autonomous mode
 				// using channel 5 of the DSM data.
-			if(rc_dsm_ch_normalized(5)<=0.6){
+			if(rc_dsm_ch_normalized(5)>=0.6){
 				KP1 = KP1 + 0.1 * rc_dsm_ch_normalized(2);
-				KI1 = KI1 + 0.01 * rc_dsm_ch_normalized(1);
-				KD1 = KD1 + 0.01* rc_dsm_ch_normalized(3);
-			}else{
-				KP2 = KP2 + 0.1 * rc_dsm_ch_normalized(2);
-				KI2 = KI2 + 0.01 * rc_dsm_ch_normalized(1);
-				KD2 = KD2 + 0.01* rc_dsm_ch_normalized(3);
+				KI1 = KI1 + 0.01 * rc_dsm_ch_normalized(4);
+				KD1 = KD1 + 0.001* rc_dsm_ch_normalized(3);
+				//body_offset = -0.1 * rc_dsm_ch_normalized(1);
+			}else if(rc_dsm_ch_normalized(5)<=-0.4){
+				KP2 = KP2 + 0.001 * rc_dsm_ch_normalized(2);
+				KI2 = KI2 + 0.0001 * rc_dsm_ch_normalized(4);
+				KD2 = KD2 + 0.0001* rc_dsm_ch_normalized(3);
+				rc_encoder_eqep_write(1, 0);
+				rc_encoder_eqep_write(2, 0);
 			}
 		}
 	 	rc_nanosleep(1E9 / RC_CTL_HZ);

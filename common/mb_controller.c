@@ -21,17 +21,59 @@
 
 static rc_filter_t D1 = RC_FILTER_INITIALIZER;
 static rc_filter_t D2 = RC_FILTER_INITIALIZER;
+mb_pid_t inner, outer;
+
+void pid_cont(mb_pid_t* mb_pid, float u_min, float u_max){
+    float kp = mb_pid->kp;
+    float ki = mb_pid->ki;
+    float kd = mb_pid->kd;
+    float d1 = mb_pid->d1;
+    float d2 = mb_pid->d2;
+    float e = mb_pid->e;
+    float e_1 = mb_pid->e_1;
+    float e_2 = mb_pid->e_2;
+    float u_1 = mb_pid->u_1;
+    float u_2 = mb_pid->u_2;
+
+    float temp_u = -(d2-d1)/d1*u_1 + d2/d1*u_2;
+    float temp_P = kp*(e+(d2-d1)/d1*e_1-d2/d1*e_2);
+    float temp_I = ki*DT*0.5*(e+(d1+d2)/d1*e_1+d2/d1*e_2);
+    float temp_D = kd*(e-2.0*e_1+e_2)/d1;
+
+    float sum = temp_u + temp_P + temp_I + temp_D;
+    if(sum>u_max) sum = u_max;
+    if(sum<u_min) sum = u_min;
+    mb_pid->u = sum;
+}
+
+
+void mb_pid_init(mb_pid_t* pid){
+    pid->d1 = DT/2.0 + pid->Tf;
+    pid->d2 = DT/2.0 - pid->Tf;
+    pid->e = 0;
+    pid->e_1 = 0;
+    pid->e_2 = 0;
+    pid->u = 0;
+    pid->u_1 = 0;
+    pid->u_2 = 0;
+}
 
 int mb_controller_init(mb_state_t* mb_state){
     mb_controller_load_config();
+    mb_pid_init(&inner);
+    //inner.Tf = 0.0002222;
+    inner.Tf = 0.0002222;
+    mb_pid_init(&outer);
+    outer.Tf = 0.07414;
     /* TODO initialize your controllers here*/
     // *mb_state = (mb_state_t){.e_phi=0.0, .ei1=0.0, .ei2=0.0, .eo1=0.0, .eo2=0.0, .e_theta=0.0, .ui1=0.0, .ui2=0.0, .uo1=0.0, .uo2=0.0};
 
     // double num[3] = {0.1152, -0.2284, 0.1132};
     // double den[3] = {0.1152, -0.2284, 0.1132};
-
-    return rc_filter_pid(&D1, -5.474, -66, -0.45, 0.06, 0.01)==0 && rc_filter_pid(&D2, -8.474, /*-44.13*/0.0, -0.1127, 0.06, 0.01)==0;
-    // return 0;
+    rc_filter_enable_saturation(&D1,-1.0,1.0);
+    //rc_filter_enable_soft_start(&D1,0.7);
+    return 0;
+    //return rc_filter_pid(&D1, -5.474, -15, -0.00, 0.04, 0.01)==0 && rc_filter_pid(&D2, 0.02214, 0.009945, 0.04473, 0.04, 0.01)==0;
 }
 
 /*******************************************************************************
@@ -68,29 +110,65 @@ int mb_controller_load_config(){
 *
 *******************************************************************************/
 
-int mb_controller_update(mb_state_t* mb_state, double Kp1, double Ki1, double Kd1, double Kp2, double Ki2, double Kd2){
+int mb_controller_update(mb_state_t* mb_state, mb_setpoints_t* mb_setpoints, double Kp1, double Ki1, double Kd1, double Kp2, double Ki2, double Kd2){
     /*TODO: Write your controller here*/
+    outer.kp = Kp2;
+    outer.ki = Ki2;
+    outer.kd = Kd2;
+    inner.kp = Kp1;
+    inner.ki = Ki1;
+    inner.kd = Kd1;
+
+    outer.e_2 = outer.e_1;
+    outer.e_1 = outer.e;
+
+    outer.e = 0 - mb_state->phi;
+    outer.u_2 = outer.u_1;
+    outer.u_1 = outer.u;
+    pid_cont(&outer, -0.35, 0.35);
+
+    // inner loop
+    inner.e_2 = inner.e_1;
+    inner.e_1 = inner.e;
+    inner.e = /*outer.u*/ - mb_state->theta;
+    inner.u_2 = inner.u_1;
+    inner.u_1 = inner.u;
+    pid_cont(&inner, -1.0, 1.0);
+
+    float duty = inner.u;
+    //if(duty>0) duty+=0.1;
+    //else duty -=0.1; 
+    mb_state->left_cmd = duty;
+    printf("duty = %f\n", duty);
+    /*
     // Outer loop
-    rc_filter_pid(&D2, Kp2, Ki2, Kd2, 0.06, 0.01);
-    float phi_r = mb_state->setpoint->phi_r;
+    rc_filter_pid(&D2, Kp2, Ki2, Kd2, 0.01, 0.01);
+    float phi_r = mb_setpoints->phi_r;
     float e_phi = phi_r - mb_state->phi;
     float theta_r = rc_filter_march(&D2, e_phi);
-    printf("theta_r = %0.3f\n", theta_r);
-    mb_state->phi = mb_state->left_encoder * 2*PI /979.2;
 
+    // ck's
+    // float e_phi = vel*DT/(0.5*WHEEL_DIAMETER) - mb_state->phi;
+    printf("phi_r=%0.4f\te_phi=%0.4f\tmb_state->phi=%0.4f\ttheta_r = %0.4f\tmb_theta = %0.4f\n", phi_r, e_phi, mb_state->phi, theta_r,mb_state->theta);
+    
 
     // Inner loop
-    rc_filter_pid(&D1, Kp1, Ki1, Kd1, 0.06, 0.01);
-    // float theta_r = 0.0;
-    float e_theta = theta_r - mb_state->theta;
+
+    rc_filter_pid(&D1, Kp1, Ki1, Kd1, 0.04, 0.01);
+    rc_filter_enable_saturation(&D1,-1.0,1.0);
+    //float theta_r = 0.0;
+    float e_theta = (theta_r - mb_state->theta);
     double duty = rc_filter_march(&D1, e_theta);
-    //if(duty > 0.0 && duty < 0.35) duty = 0.35;
-    //else if(duty < 0.0 && duty > -0.35) duty = -0.35;    
+    printf("duty = %f\n", duty);
+    if (duty < 0.2 && duty > 0) duty = 0.2;
+    else if(duty > -0.2 && duty <= 0) duty =-0.2;    
     if (duty < -1.0) duty = -1.0;
     else if(duty > 1.0) duty = 1.0;
     mb_state->left_cmd = duty;
     mb_state->right_cmd = duty;
-    printf("duty = %f\n", mb_state->left_cmd);
+
+    */
+    //if(e_theta<0.025) mb_controller_cleanup();
 
     /* old method */
     // // float phi_r = mb_state->setpoint->fwd_velocity * 0;  // need to convert m/s into rad
@@ -153,6 +231,7 @@ int mb_controller_update(mb_state_t* mb_state, double Kp1, double Ki1, double Kd
 *******************************************************************************/
 
 int mb_controller_cleanup(){
-
-    return rc_filter_free(&D1);
+    rc_filter_free(&D1);
+    rc_filter_free(&D2);
+    return 0;
 }

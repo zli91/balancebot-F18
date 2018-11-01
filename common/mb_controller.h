@@ -6,6 +6,21 @@
 #define CFG_PATH "pid.cfg"
 #define PI 3.1415926
 
+typedef struct controller_pid controller_pid_t;
+struct controller_pid{
+    float Kp; 
+    float Ki; 
+    float Kd; 
+    float Tf;
+    float Ts;  
+    float e_0;   
+    float e_1; 
+    float e_2; 
+    float u_0;   
+    float u_1; 
+    float u_2; 
+};
+
 typedef struct mb_pid mb_pid_t;
 struct mb_pid{
     float kp; 

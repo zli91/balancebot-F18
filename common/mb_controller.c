@@ -22,8 +22,60 @@
 static rc_filter_t D1 = RC_FILTER_INITIALIZER;
 static rc_filter_t D2 = RC_FILTER_INITIALIZER;
 mb_pid_t inner, outer;
+controller_pid_t inner_loop, outer_loop;
+
+void controller_pid_init(controller_pid_t* controller){
+    controller->e_0 = 0;
+    controller->e_1 = 0;
+    controller->e_2 = 0;
+    controller->u_0 = 0;
+    controller->u_1 = 0;
+    controller->u_2 = 0;
+}
+
+void controller_set_pid(controller_pid_t* controller, float Kp, float Ki, float Kd, float Tf, float Ts){
+    controller->Kp = Kp;
+    controller->Ki = Ki;
+    controller->Kd = Kd;
+    controller->Tf = Tf;
+    controller->Ts = Ts;
+}
+
+float controller_march(controller_pid_t* controller, float input, float min, float max){
+    controller->e_2 = controller->e_1;
+    controller->e_1 = controller->e_0;
+    controller->e_0 = input;
+    controller->u_2 = controller->u_1;
+    controller->u_1 = controller->u_0;
+    
+    float Kp = controller->Kp;
+    float Ki = controller->Ki;
+    float Kd = controller->Kd;
+    float Tf = controller->Tf;
+    float Ts = controller->Ts;
+    float e_0 = controller->e_0;
+    float e_1 = controller->e_1;
+    float e_2 = controller->e_2;
+    float u_1 = controller->u_1;
+    float u_2 = controller->u_2;
+    float a = 1 + 0.5*Ts/Tf;
+    float b = 1 - 0.5*Ts/Tf;
+    
+    float U = 2*u_1 - b*u_2;
+    float KP = Kp * (a*e_0 - 2*e_1 + b*e_2);
+    float KI = Ki * (0.5*Ts*a*e_0 + 0.5*Ts*Ts/Tf*e_1 - 0.5*Ts*b*e_2);
+    float KD = Kd * (1/Tf*e_0 - 2/Tf*e_1 + 1/Tf*e_2);
+    
+    float u_0 = (U + KP + KD + KI)/a;
+    if(u_0 < min) u_0 = min;
+    if(u_0 > max) u_0 = max;
+    controller->u_0 = u_0;
+    return u_0;
+}
+
 
 void pid_cont(mb_pid_t* mb_pid, float u_min, float u_max){
+    
     float kp = mb_pid->kp;
     float ki = mb_pid->ki;
     float kd = mb_pid->kd;
@@ -60,11 +112,12 @@ void mb_pid_init(mb_pid_t* pid){
 
 int mb_controller_init(mb_state_t* mb_state){
     mb_controller_load_config();
-    mb_pid_init(&inner);
-    //inner.Tf = 0.0002222;
     inner.Tf = 0.0002222;
-    mb_pid_init(&outer);
+    mb_pid_init(&inner);
     outer.Tf = 0.07414;
+    mb_pid_init(&outer);
+    /* CK */
+    controller_pid_init(&inner_loop);
     /* TODO initialize your controllers here*/
     // *mb_state = (mb_state_t){.e_phi=0.0, .ei1=0.0, .ei2=0.0, .eo1=0.0, .eo2=0.0, .e_theta=0.0, .ui1=0.0, .ui2=0.0, .uo1=0.0, .uo2=0.0};
 
@@ -112,6 +165,10 @@ int mb_controller_load_config(){
 
 int mb_controller_update(mb_state_t* mb_state, mb_setpoints_t* mb_setpoints, double Kp1, double Ki1, double Kd1, double Kp2, double Ki2, double Kd2){
     /*TODO: Write your controller here*/
+    /* CK */
+    //controller_set_pid(&inner_loop, Kp1, Ki1, Kd1, 0.0002222, 0.01);
+    //float duty = controller_march(&inner_loop, 0 - mb_state->theta , -1.0, 1.0);
+    
     outer.kp = Kp2;
     outer.ki = Ki2;
     outer.kd = Kd2;

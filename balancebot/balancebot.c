@@ -25,15 +25,31 @@
 * int main() 
 *
 *******************************************************************************/
-double KP1 = -4.8;
-double KI1 = -14.5;
-double KD1 = -0.03;
+rob_data_t rob_data;
 
-double KP2 = 0.00855;//0.02214;
-double KI2 = 0.0152;//0.0009945;
-double KD2 = 0.00864;//0.04473;
+void robot_init(mb_state_t* mb_state, mb_setpoints_t* mb_setpoints, rob_data_t* rob_data){
+	rc_encoder_eqep_write(1, 0);
+	rc_encoder_eqep_write(2, 0);
 
-double body_offset = -0.0152;
+	rob_data-> kp1 = -6.30;
+    rob_data-> ki1 = -10.156;
+    rob_data-> kd1 = -0.130;
+
+    rob_data-> kp2 = -0.0221;
+    rob_data-> ki2 = -0.0191;
+    rob_data-> kd2 = -0.0099;
+    
+    rob_data-> kp3 = 1.2;
+    rob_data-> ki3 = 0.001;
+    rob_data-> kd3 = 0.001;
+
+    rob_data-> body_angle = 0.023;
+
+    mb_state-> phi_old = 0;
+	mb_state-> psi_old = 0;
+	mb_setpoints-> fwd_velocity = 0;
+	mb_setpoints-> turn_velocity = 0;
+}
 
 int main(){
 	// make sure another instance isn't running
@@ -133,7 +149,7 @@ int main(){
 	rc_set_state(RUNNING); 
 
 	//Initialize
-	mb_setpoints.phi_old = 0;
+	robot_init(&mb_state, &mb_setpoints, &rob_data);
 
 	// Keep looping until state changes to EXITING
 	while(rc_get_state()!=EXITING){
@@ -170,36 +186,47 @@ void balancebot_controller(){
 	//lock state mutex
 	pthread_mutex_lock(&state_mutex);
 	// Read IMU
-	mb_state.theta = mpu_data.dmp_TaitBryan[TB_PITCH_X] - body_offset;
+	mb_state.theta = mpu_data.dmp_TaitBryan[TB_PITCH_X] - rob_data.body_angle;
+
 	// Read encoders
-	int prev_left_encoder = mb_state.left_encoder;
-	int prev_right_encoder = mb_state.right_encoder;
-	//mb_state.left_encoder = (-rc_encoder_eqep_read(2)-prev_left_encoder);
-	//mb_state.right_encoder = rc_encoder_eqep_read(1)-prev_right_encoder;
+	mb_state.prev_left_encoder = mb_state.left_encoder;
+	mb_state.prev_right_encoder = mb_state.right_encoder;
 	mb_state.left_encoder = -rc_encoder_eqep_read(2);
 	mb_state.right_encoder = rc_encoder_eqep_read(1);
+
 	// Average wheel angle
 	mb_state.phi = 0.5*(mb_state.left_encoder + mb_state.right_encoder)/(GEAR_RATIO*ENCODER_RES)*(2*3.14159);
+
 	// convert command velocity to phi
-    // float vel = mb_setpoints.fwd_velocity;
-    float vel = 0;
-    mb_setpoints.phi_r = mb_setpoints.phi_old + vel*DT/(0.5*WHEEL_DIAMETER);
-    mb_setpoints.phi_old = mb_setpoints.phi_r;
+    float vel = mb_setpoints.fwd_velocity;
+    float avel = mb_setpoints.turn_velocity;
+
+    mb_state.phi_r = mb_state.phi_old + vel*DT/(0.5*WHEEL_DIAMETER);
+    mb_state.phi_old = mb_state.phi_r;
+
+    mb_state.psi_r = mb_state.psi_old + avel*DT;
+    mb_state.psi_old = mb_state.psi_r;
 	
     // Update odometry 
- 
+ 	mb_odometry_update(&mb_odometry, &mb_state);
 
-    // Calculate controller outputs
-    float b_vel =  (mb_state.left_encoder - prev_left_encoder)/(GEAR_RATIO*ENCODER_RES)*(2*3.14159)/DT;
-    mb_controller_update(&mb_state,&mb_setpoints,KP1,KI1,KD1,KP2,KI2,KD2);
-	mb_motor_set_all(mb_state.left_cmd);
-    printf("Kp1: %0.3f\tKi1: %0.3f\tKd1: %0.3f\tKp2: %0.4f\tKi2: %0.4f\tKd2: %0.4f\tb_vel:%0.4f\n",KP1,KI1,KD1,KP2,KI2,KD2,b_vel);
-	if(!mb_setpoints.manual_ctl){
+    // Calculate controller outputs    
+	if(mb_setpoints.manual_ctl == 1){
     	//send motor commands
+    	mb_controller_update(&mb_state, &mb_setpoints, &mb_odometry, &rob_data);
+		mb_motor_set(RIGHT_MOTOR, mb_state.right_cmd);
+		mb_motor_set(LEFT_MOTOR, mb_state.left_cmd);
+    	printf("Kp1: %0.3f\tKi1: %0.3f\tKd1: %0.3f\tKp2: %0.4f\tKi2: %0.4f\tKd2: %0.4f\t",rob_data.kp1,rob_data.ki1,rob_data.kd1,rob_data.kp3,rob_data.ki3,rob_data.kd3);
+    	//printf("x = %f\t y = %f\t psi = %f\t", mb_odometry.x, mb_odometry.y, mb_odometry.psi);
    	}
 
-    if(mb_setpoints.manual_ctl){
+    if(mb_setpoints.manual_ctl == 0){
     	//send motor commands
+    	mb_controller_update(&mb_state, &mb_setpoints, &mb_odometry, &rob_data);
+		mb_motor_set(RIGHT_MOTOR, mb_state.right_cmd);
+		mb_motor_set(LEFT_MOTOR, mb_state.left_cmd);
+    	printf("Kp1: %0.3f\tKi1: %0.3f\tKd1: %0.3f\tKp2: %0.4f\tKi2: %0.4f\tKd2: %0.4f\t",rob_data.kp1,rob_data.ki1,rob_data.kd1,rob_data.kp3,rob_data.ki3,rob_data.kd3);
+    	//printf("x = %f\t y = %f\t psi = %f\t", mb_odometry.x, mb_odometry.y, mb_odometry.psi);
    	}
 
    	//unlock state mutex
@@ -220,20 +247,36 @@ void* setpoint_control_loop(void* ptr){
 	while(1){
 
 		if(rc_dsm_is_new_data()){
+			if(rc_dsm_ch_normalized(7)>=0.6){
+				mb_setpoints.manual_ctl = 1;
+				mb_setpoints.fwd_velocity = 0.6 * rc_dsm_ch_normalized(3);
+				mb_setpoints.turn_velocity = -1.2 * rc_dsm_ch_normalized(4);
+			}
+			else{
+				mb_setpoints.manual_ctl = 0;
+				mb_setpoints.fwd_velocity = 0;
+				mb_setpoints.turn_velocity = 0;
+			}
 				// TODO: Handle the DSM data from the Spektrum radio reciever
 				// You may should implement switching between manual and autonomous mode
 				// using channel 5 of the DSM data.
 			if(rc_dsm_ch_normalized(5)>=0.6){
-				KP1 = KP1 + 0.1 * rc_dsm_ch_normalized(2);
-				KI1 = KI1 + 0.01 * rc_dsm_ch_normalized(4);
-				KD1 = KD1 + 0.001* rc_dsm_ch_normalized(3);
-				//body_offset = -0.1 * rc_dsm_ch_normalized(1);
+				rob_data.kp1 += 0.1 * rc_dsm_ch_normalized(2);
+				rob_data.ki1 += + 0.01 * rc_dsm_ch_normalized(4);
+				rob_data.kd1 += + 0.001* rc_dsm_ch_normalized(3);
+				//rob_data.body_angle = -0.1 * rc_dsm_ch_normalized(1);
 			}else if(rc_dsm_ch_normalized(5)<=-0.4){
-				KP2 = KP2 + 0.001 * rc_dsm_ch_normalized(2);
-				KI2 = KI2 + 0.0001 * rc_dsm_ch_normalized(4);
-				KD2 = KD2 + 0.0001* rc_dsm_ch_normalized(3);
-				rc_encoder_eqep_write(1, 0);
-				rc_encoder_eqep_write(2, 0);
+				//rob_data.kp2 += + 0.001 * rc_dsm_ch_normalized(2);
+				//rob_data.ki2 += + 0.0001 * rc_dsm_ch_normalized(4);
+				//rob_data.kd2 += + 0.0001* rc_dsm_ch_normalized(3);
+				rob_data.kp3 += + 0.001 * rc_dsm_ch_normalized(2);
+				rob_data.ki3 += + 0.0001 * rc_dsm_ch_normalized(4);
+				rob_data.kd3 += + 0.0001* rc_dsm_ch_normalized(3);
+				mb_odometry_init(&mb_odometry, 0.0,0.0,0.0);
+				mb_state.phi_old = 0;
+				mb_state.psi_old = 0;
+				mb_setpoints.fwd_velocity = 0;
+				mb_setpoints.turn_velocity = 0;
 			}
 		}
 	 	rc_nanosleep(1E9 / RC_CTL_HZ);

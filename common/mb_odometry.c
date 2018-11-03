@@ -21,7 +21,7 @@ void mb_odometry_update(mb_odometry_t* mb_odometry, mb_state_t* mb_state){
 	float x = mb_odometry->x;
 	float y = mb_odometry->y;
 	float psi = mb_odometry->psi;
-	float dtheta = (right - left) / WHEEL_BASE;
+	float dtheta = -(right - left) / WHEEL_BASE;
 	float d = (right + left) / 2;
 
 	x = x + d * cos(psi + dtheta/2);

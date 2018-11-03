@@ -21,6 +21,7 @@
 
 controller_pid_t inner_loop, outer_loop, turning_loop;
 
+
 void controller_pid_init(controller_pid_t* controller){
     controller->e_0 = 0;
     controller->e_1 = 0;
@@ -134,7 +135,7 @@ int mb_controller_update(mb_state_t* mb_state, mb_setpoints_t* mb_setpoints, mb_
     else if(duty - diff_duty < -1.0) mb_state->right_cmd = -1.0;
     else mb_state->right_cmd = duty - diff_duty;
     
-    printf("theta_r= %f\tduty= %f\tdiff_duty=%f\tpsi_r=%f\n",theta_r, duty, diff_duty, mb_state->psi_r);
+    //printf("theta_r= %f\tduty= %f\tdiff_duty=%f\tpsi_r=%f\n",theta_r, duty, diff_duty, mb_state->psi_r);
 
     return 0;
 }

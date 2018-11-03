@@ -29,7 +29,7 @@ void mb_odometry_update(mb_odometry_t* mb_odometry, mb_state_t* mb_state){
 	mb_odometry->x = x;
 	mb_odometry->y = y;
 	mb_odometry->psi = psi + dtheta;
-	printf("x = %f\t y = %f\t psi=%f\t", x,y,psi + dtheta);
+	//printf("x = %f\t y = %f\t psi=%f\t", x,y,psi + dtheta);
 }
 
 

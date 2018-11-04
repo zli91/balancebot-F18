@@ -71,7 +71,16 @@ void position_init(){
 	rc_encoder_eqep_write(2, 0);
 }
 
-
+float velocity_mapping(float initial, float current, float target, float max_speed){
+	if (current-initial<=0) return 0.5 * max_speed;
+	else if(current-target<=0) return 0;
+	else{
+		float alpha = target - initial;
+		float beta = 0.5 * max_speed;
+		float x = current - initial;
+		return -4*beta/pow(x/alpha,2) + 4*beta/alpha*x + (max_speed - beta);
+	}
+}
 
 int main(){
 	// make sure another instance isn't running
@@ -319,6 +328,7 @@ void* setpoint_control_loop(void* ptr){
 				if(init_switch) mb_odometry_copy(&tmp_odometry, &mb_odometry);
 				init_switch = 0;
 				distance = mb_odometry_distance(&mb_odometry, &tmp_odometry);
+				//mb_setpoints.fwd_velocity = velocity_mapping(0.0, distance, straight_distance, fwd_vel_max);
 				if(distance > straight_distance) mb_setpoints.fwd_velocity = 0;
 				else if(distance > 0.90*straight_distance) mb_setpoints.fwd_velocity = fwd_vel_max * 0.5;
 				else if(distance > 0.70*straight_distance) mb_setpoints.fwd_velocity = fwd_vel_max * 0.7;

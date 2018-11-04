@@ -27,7 +27,7 @@
 *******************************************************************************/
 rob_data_t rob_data;
 int dsm_ch5, dsm_ch7;
-const float straight_distance = 2.0; //meters 
+const float straight_distance = 11.0; //meters 
 const float left_turn_distance = 1.0; // meters
 const float fwd_vel_max = 0.6;
 const float turn_vel_max = 2;
@@ -37,19 +37,19 @@ void robot_init(mb_state_t* mb_state, mb_setpoints_t* mb_setpoints, rob_data_t* 
 	rc_encoder_eqep_write(1, 0);
 	rc_encoder_eqep_write(2, 0);
 
-	rob_data-> kp1 = -6.086;//-5.15; 
-    rob_data-> ki1 = -18.798;//-10.423;
-    rob_data-> kd1 = -0.198;//-0.209;
+	rob_data-> kp1 = -5.15; //-6.086;
+    rob_data-> ki1 = -10.423; //-18.798;
+    rob_data-> kd1 = -0.209; //-0.198;
 
-    rob_data-> kp2 = -0.0163;//-0.0204;
-    rob_data-> ki2 = -0.0021;//-0.0208;
-    rob_data-> kd2 = -0.0133;//-0.0106;
+    rob_data-> kp2 = -0.0204;//-0.0163;
+    rob_data-> ki2 = -0.0208;//-0.0021;
+    rob_data-> kd2 = -0.0106;//-0.0133;
     
     rob_data-> kp3 = 1.2;
-    rob_data-> ki3 = 0.001;
-    rob_data-> kd3 = 0.001;
+    rob_data-> ki3 = 0.4;
+    rob_data-> kd3 = 0.04;
 
-    rob_data-> body_angle = 0;//0.023;
+    rob_data-> body_angle = 0.023;
 
     mb_state-> phi_old = 0;
 	mb_state-> psi_old = 0;
@@ -78,7 +78,7 @@ float velocity_mapping(float initial, float current, float target, float max_spe
 		float alpha = target - initial;
 		float beta = 0.5 * max_speed;
 		float x = current - initial;
-		return -4*beta/pow(x/alpha,2) + 4*beta/alpha*x + (max_speed - beta);
+		return -4*beta/pow(x/alpha,2) + 4*beta/alpha*x + (0.3 * max_speed);
 	}
 }
 
@@ -291,12 +291,9 @@ void* setpoint_control_loop(void* ptr){
 				mb_setpoints.manual_ctl = 0;
 				mb_setpoints.fwd_velocity = 0;
 				mb_setpoints.turn_velocity = 0;
-				init_switch = 1;
 			}else if(dsm_ch7 == 0 && dsm_ch5 == -1){
 				/* Auto mode - initialize */
-				mb_setpoints.manual_ctl = 0;
-				if(init_switch) position_init();
-				init_switch = 0;
+				position_init();
 			}else if(dsm_ch7 == 0 && dsm_ch5 == 1){
 				/* Auto mode - Empty channel */
 				mb_setpoints.manual_ctl = 0;
@@ -304,13 +301,16 @@ void* setpoint_control_loop(void* ptr){
 				/* Manual mode - Default */
 				mb_setpoints.manual_ctl = 1;
 				mb_setpoints.fwd_velocity = fwd_vel_max * rc_dsm_ch_normalized(3);
-				mb_setpoints.turn_velocity = -turn_vel_max * rc_dsm_ch_normalized(4);
+				mb_setpoints.turn_velocity = turn_vel_max * rc_dsm_ch_normalized(4);
 			}else if(dsm_ch7 == 1 && dsm_ch5 == -1){
 				/* Manual mode - Tune Outer Loop */
 				mb_setpoints.manual_ctl = 1;
-				rob_data.kp2 += + 0.001 * rc_dsm_ch_normalized(2);
-				rob_data.ki2 += + 0.0001 * rc_dsm_ch_normalized(4);
-				rob_data.kd2 += + 0.0001* rc_dsm_ch_normalized(3);
+				//rob_data.kp2 += + 0.001 * rc_dsm_ch_normalized(2);
+				//rob_data.ki2 += + 0.0001 * rc_dsm_ch_normalized(4);
+				//rob_data.kd2 += + 0.0001* rc_dsm_ch_normalized(3);
+				rob_data.kp3 += + 0.001 * rc_dsm_ch_normalized(2);
+				rob_data.ki3 += + 0.001 * rc_dsm_ch_normalized(4);
+				rob_data.kd3 += + 0.001* rc_dsm_ch_normalized(3);
 			}else if(dsm_ch7 == 1 && dsm_ch5 == 1){
 				/* Manual mode - Tune Inner Loop */
 				mb_setpoints.manual_ctl = 1;
@@ -332,13 +332,19 @@ void* setpoint_control_loop(void* ptr){
 				if(distance > straight_distance) mb_setpoints.fwd_velocity = 0;
 				else if(distance > 0.90*straight_distance) mb_setpoints.fwd_velocity = fwd_vel_max * 0.5;
 				else if(distance > 0.70*straight_distance) mb_setpoints.fwd_velocity = fwd_vel_max * 0.7;
-				else if(distance > 0.30*straight_distance) mb_setpoints.fwd_velocity = fwd_vel_max * 0.9;
+				else if(distance > 0.30*straight_distance) mb_setpoints.fwd_velocity = fwd_vel_max * 0.8;
 				else if(distance > 0.10*straight_distance) mb_setpoints.fwd_velocity = fwd_vel_max * 0.7;
 				else mb_setpoints.fwd_velocity = fwd_vel_max * 0.5;
 			}else if(dsm_ch7 == -1 && dsm_ch5 == 1){
 				/* Task mode - 4 Left Turns */
-				if(init_switch) mb_odometry_copy(&tmp_odometry, &mb_odometry);
+				if(init_switch){
+					mb_odometry_copy(&tmp_odometry, &mb_odometry);	
+				} 
 				init_switch = 0;
+				mb_state.psi_r = tmp_odometry.psi + PI/2;
+				mb_state.psi_old = tmp_odometry.psi + PI/2;
+				mb_setpoints.turn_velocity = 0;
+				/*
 				switch (left_turn_task)
 				{
 					case ROB_FORWARD:
@@ -352,17 +358,18 @@ void* setpoint_control_loop(void* ptr){
 						break;
 					case ROB_TURN:
 						angles = mb_odometry_angles(&mb_odometry, &tmp_odometry);
-						if(angles >= PI/2){
+						if(angles >= PI/2-0.17){
 							mb_setpoints.turn_velocity = 0;
 							left_turn_task = ROB_FORWARD;
 							init_switch = 1;
-						}else mb_setpoints.turn_velocity = turn_vel_max * 0.5;
+						}else mb_setpoints.turn_velocity = turn_vel_max;
 						break;
 					case ROB_STOP:
 						mb_setpoints.fwd_velocity = 0;
 						mb_setpoints.turn_velocity = 0;
 						break;
 				}
+				*/
 
 			}else printf("ERROR: No DSM channel\n");
 		}
@@ -389,7 +396,7 @@ void* printf_loop(void* ptr){
 			printf("\nRUNNING: Hold upright to balance.\n");
 			printf("                 SENSORS               |");
 			printf("           ODOMETRY          |");
-			printf("                            PID                          |");
+			printf("                            PID                            |");
 			printf("\n");
 			printf("    θ    |");
 			printf("    φ    |");
@@ -425,11 +432,13 @@ void* printf_loop(void* ptr){
 			printf("%7.3f  |", rob_data.kp1);
 			printf("%7.3f  |", rob_data.ki1);
 			printf("%7.3f  |", rob_data.kd1);
-			printf("%7.4f  |", rob_data.kp2);
-			printf("%7.4f  |", rob_data.ki2);
-			printf("%7.4f  |", rob_data.kd2);
+			printf("%7.4f  |", rob_data.kp3);
+			printf("%7.4f  |", rob_data.ki3);
+			printf("%7.4f  |", rob_data.kd3);
 			printf("%7.3f  |", mb_setpoints.fwd_velocity);
-
+			printf("%7.4f  |", mb_state.yaw);
+			printf("%7.4f  |", mb_state.psi_r);
+			printf("%7.4f  |", (mb_state.left_cmd-mb_state.right_cmd)/2);
 			//printf("%6.4f|", mpu_data.dmp_TaitBryan[TB_YAW_Z]);
 			pthread_mutex_unlock(&state_mutex);
 			fflush(stdout);

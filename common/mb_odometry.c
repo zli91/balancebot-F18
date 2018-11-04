@@ -23,7 +23,7 @@ void mb_odometry_copy(mb_odometry_t* mb_odometry_out, mb_odometry_t* mb_odometry
 }
 
 float mb_odometry_distance(mb_odometry_t* mb_odometry1, mb_odometry_t* mb_odometry2){
-	return sqrt( pow(mb_odometry1->x-mb_odometry2->x,2) + pow(mb_odometry1.y-mb_odometry2.y,2));
+	return sqrt( pow(mb_odometry1->x-mb_odometry2->x,2) + pow(mb_odometry1->y-mb_odometry2->y,2));
 }
 
 float mb_odometry_angles(mb_odometry_t* mb_odometry_final, mb_odometry_t* mb_odometry_initial){

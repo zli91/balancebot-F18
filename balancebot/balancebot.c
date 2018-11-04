@@ -28,8 +28,10 @@
 rob_data_t rob_data;
 int dsm_ch5, dsm_ch7;
 const float straight_distance = 2.0; //meters 
+const float left_turn_distance = 1.0; // meters
 const float fwd_vel_max = 0.6;
 const float turn_vel_max = 2;
+mb_odometry_t tmp_odometry;
 
 void robot_init(mb_state_t* mb_state, mb_setpoints_t* mb_setpoints, rob_data_t* rob_data){
 	rc_encoder_eqep_write(1, 0);
@@ -68,6 +70,8 @@ void position_init(){
 	rc_encoder_eqep_write(1, 0);
 	rc_encoder_eqep_write(2, 0);
 }
+
+
 
 int main(){
 	// make sure another instance isn't running
@@ -158,6 +162,7 @@ int main(){
 
 	printf("initializing odometry...\n");
 	mb_odometry_init(&mb_odometry, 0.0,0.0,0.0);
+	mb_odometry_init(&tmp_odometry, 0.0,0.0,0.0);
 
 	printf("attaching imu interupt...\n");
 	rc_mpu_set_dmp_callback(&balancebot_controller);
@@ -258,8 +263,11 @@ void balancebot_controller(){
 *
 *******************************************************************************/
 void* setpoint_control_loop(void* ptr){
-	bool init_switch = 0;
-	float current_pos = 0;
+	int init_switch = 0;
+	float distance = 0;
+	float angles = 0;
+	int left_turn_task = ROB_FORWARD;
+	int left_turn_count = 0;
 	while(1){
 		if(rc_dsm_is_new_data()){
 			if(rc_dsm_ch_normalized(7)>=0.9) dsm_ch7 = 1;
@@ -302,20 +310,49 @@ void* setpoint_control_loop(void* ptr){
 				rob_data.kd1 += + 0.001* rc_dsm_ch_normalized(3);
 			}else if(dsm_ch7 == -1 && dsm_ch5 == 0){
 				/* Task mode - Default */
-				
+				init_switch = 1;
+				left_turn_task = ROB_FORWARD;
+				left_turn_count = 0;
 			}else if(dsm_ch7 == -1 && dsm_ch5 == -1){
 				/* Task mode - Straight Line Drag Racing */
 				mb_setpoints.manual_ctl = 0;
-				current_pos = sqrt(pow(mb_odometry.x,2) + pow(mb_odometry.y,2));
-				if(current_pos > straight_distance) mb_setpoints.fwd_velocity = 0;
-				else if(current_pos > 0.80*straight_distance) mb_setpoints.fwd_velocity = fwd_vel_max * 0.5;
-				else if(current_pos > 0.60*straight_distance) mb_setpoints.fwd_velocity = fwd_vel_max * 0.7;
-				else if(current_pos > 0.40*straight_distance) mb_setpoints.fwd_velocity = fwd_vel_max * 0.9;
-				else if(current_pos > 0.20*straight_distance) mb_setpoints.fwd_velocity = fwd_vel_max * 0.7;
+				if(init_switch) mb_odometry_copy(&tmp_odometry, &mb_odometry);
+				init_switch = 0;
+				distance = mb_odometry_distance(&mb_odometry, &tmp_odometry);
+				if(distance > straight_distance) mb_setpoints.fwd_velocity = 0;
+				else if(distance > 0.90*straight_distance) mb_setpoints.fwd_velocity = fwd_vel_max * 0.5;
+				else if(distance > 0.70*straight_distance) mb_setpoints.fwd_velocity = fwd_vel_max * 0.7;
+				else if(distance > 0.30*straight_distance) mb_setpoints.fwd_velocity = fwd_vel_max * 0.9;
+				else if(distance > 0.10*straight_distance) mb_setpoints.fwd_velocity = fwd_vel_max * 0.7;
 				else mb_setpoints.fwd_velocity = fwd_vel_max * 0.5;
 			}else if(dsm_ch7 == -1 && dsm_ch5 == 1){
 				/* Task mode - 4 Left Turns */
-				
+				if(init_switch) mb_odometry_copy(&tmp_odometry, &mb_odometry);
+				init_switch = 0;
+				switch (left_turn_task)
+				{
+					case ROB_FORWARD:
+						distance = mb_odometry_distance(&mb_odometry, &tmp_odometry);
+						if(distance >= left_turn_distance){
+							mb_setpoints.fwd_velocity = 0;
+							left_turn_count ++;
+							if(left_turn_count >= 4) left_turn_task = ROB_STOP;
+							else left_turn_task = ROB_TURN;
+						}else mb_setpoints.fwd_velocity = fwd_vel_max * 0.5;
+						break;
+					case ROB_TURN:
+						angles = mb_odometry_angles(&mb_odometry, &tmp_odometry);
+						if(angles >= PI/2){
+							mb_setpoints.turn_velocity = 0;
+							left_turn_task = ROB_FORWARD;
+							init_switch = 1;
+						}else mb_setpoints.turn_velocity = turn_vel_max * 0.5;
+						break;
+					case ROB_STOP:
+						mb_setpoints.fwd_velocity = 0;
+						mb_setpoints.turn_velocity = 0;
+						break;
+				}
 
 			}else printf("ERROR: No DSM channel\n");
 		}

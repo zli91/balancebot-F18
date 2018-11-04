@@ -7,6 +7,8 @@
 
 #include "../balancebot/balancebot.h"
 
+const float dtheta_thresh = 0.05;
+
 void mb_odometry_init(mb_odometry_t* mb_odometry, float x, float y, float theta){
 	/* TODO */
 	mb_odometry->x = x;
@@ -23,6 +25,16 @@ void mb_odometry_update(mb_odometry_t* mb_odometry, mb_state_t* mb_state){
 	float psi = mb_odometry->psi;
 	float dtheta = -(right - left) / WHEEL_BASE;
 	float d = (right + left) / 2;
+
+	/* Gyrodometry */
+	float dyaw = mb_state->yaw - mb_state->prev_yaw;
+	if(dyaw > PI/2) dyaw = PI - dyaw;
+	else if(dyaw < -PI/2) dyaw = -PI - dyaw;
+	
+	// need testing
+	//float dtheta_diff = abs(dyaw - dtheta);
+	//if(dtheta_diff > dtheta_thresh) dtheta = dyaw;
+
 
 	x = x + d * cos(psi + dtheta/2);
 	y = y + d * sin(psi + dtheta/2);

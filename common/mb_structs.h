@@ -31,6 +31,9 @@ struct mb_state{
 
     int prev_left_encoder;      
     int prev_right_encoder;     
+
+    float yaw;
+    float prev_yaw;
 };
 
 

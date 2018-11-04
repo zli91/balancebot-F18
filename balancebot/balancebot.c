@@ -51,8 +51,10 @@ void robot_init(mb_state_t* mb_state, mb_setpoints_t* mb_setpoints, rob_data_t* 
 
     mb_state-> phi_old = 0;
 	mb_state-> psi_old = 0;
+	mb_state-> yaw = 0;
 	mb_setpoints-> fwd_velocity = 0;
 	mb_setpoints-> turn_velocity = 0;
+
 }
 
 void position_init(){
@@ -203,6 +205,8 @@ void balancebot_controller(){
 	pthread_mutex_lock(&state_mutex);
 	// Read IMU
 	mb_state.theta = mpu_data.dmp_TaitBryan[TB_PITCH_X] - rob_data.body_angle;
+	mb_state.prev_yaw = mb_state.yaw;
+	mb_state.yaw = mpu_data.dmp_TaitBryan[TB_YAW_Z];
 
 	// Read encoders
 	mb_state.prev_left_encoder = mb_state.left_encoder;

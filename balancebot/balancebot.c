@@ -26,7 +26,7 @@
 *
 *******************************************************************************/
 rob_data_t rob_data;
-int dsm_ch5, dsm_ch7;
+int dsm_ch5 = 0, dsm_ch7 = 0;
 const float straight_distance = 11.0; //meters 
 const float left_turn_distance = 1.0; // meters
 const float fwd_vel_max = 0.6;
@@ -217,6 +217,7 @@ void balancebot_controller(){
 
 	//lock state mutex
 	pthread_mutex_lock(&state_mutex);
+	
 	// Read IMU
 	mb_state.theta = mpu_data.dmp_TaitBryan[TB_PITCH_X] - rob_data.body_angle;
 	mb_state.prev_yaw = mb_state.yaw;
@@ -229,8 +230,66 @@ void balancebot_controller(){
 	mb_state.right_encoder = rc_encoder_eqep_read(1);
 
 	// Average wheel angle
-	mb_state.phi = 0.5*(mb_state.left_encoder + mb_state.right_encoder)/(GEAR_RATIO*ENCODER_RES)*(2*3.14159);
+	mb_state.phi = 0.5*(mb_state.left_encoder + mb_state.right_encoder)/(GEAR_RATIO*ENCODER_RES)*(2*PI);
+	
+    // Update odometry 
+ 	mb_odometry_update(&mb_odometry, &mb_state);
 
+	// Task mode Operation
+	if(dsm_ch7 == -1 && dsm_ch5 == 0){
+		/* Task mode - Default */
+		init_switch = 1;
+		left_turn_task = ROB_FORWARD;
+		left_turn_count = 0;
+	}else if(dsm_ch7 == -1 && dsm_ch5 == -1){
+		/* Task mode - Straight Line Drag Racing */
+		mb_setpoints.manual_ctl = 0;
+		if(init_switch) mb_odometry_copy(&tmp_odometry, &mb_odometry);
+		init_switch = 0;
+		distance = mb_odometry_distance(&mb_odometry, &tmp_odometry);
+		//mb_setpoints.fwd_velocity = velocity_mapping(0.0, distance, straight_distance, fwd_vel_max);
+		if(distance > straight_distance) mb_setpoints.fwd_velocity = 0;
+		else if(distance > 0.90*straight_distance) mb_setpoints.fwd_velocity = fwd_vel_max * 0.5;
+		else if(distance > 0.70*straight_distance) mb_setpoints.fwd_velocity = fwd_vel_max * 0.7;
+		else if(distance > 0.30*straight_distance) mb_setpoints.fwd_velocity = fwd_vel_max * 0.8;
+		else if(distance > 0.10*straight_distance) mb_setpoints.fwd_velocity = fwd_vel_max * 0.7;
+		else mb_setpoints.fwd_velocity = fwd_vel_max * 0.5;
+	}else if(dsm_ch7 == -1 && dsm_ch5 == 1){
+		/* Task mode - 4 Left Turns */
+		if(init_switch)	mb_odometry_copy(&tmp_odometry, &mb_odometry);
+		init_switch = 0;
+		// test code
+		mb_state.psi_r = tmp_odometry.psi + PI/2;
+		mb_state.psi_old = tmp_odometry.psi + PI/2;
+		mb_setpoints.turn_velocity = 0;
+		/*
+		switch (left_turn_task)
+		{
+			case ROB_FORWARD:
+				distance = mb_odometry_distance(&mb_odometry, &tmp_odometry);
+				if(distance >= left_turn_distance-0.1){
+					mb_setpoints.fwd_velocity = fwd_vel_max * 0.3;
+					left_turn_count ++;
+					if(left_turn_count >= 4) left_turn_task = ROB_STOP;
+					else left_turn_task = ROB_TURN;
+				}else mb_setpoints.fwd_velocity = fwd_vel_max * 0.5;
+				break;
+			case ROB_TURN:
+				mb_state.psi_r = tmp_odometry.psi + PI/2;
+				mb_state.psi_old = tmp_odometry.psi + PI/2;
+				mb_setpoints.turn_velocity = 0;
+				if(abs(mb_state.psi_r-mb_odometry.psi) <= 0.04){
+					left_turn_task = ROB_FORWARD;
+					init_switch = 1;
+				}
+				break;
+			case ROB_STOP:
+				mb_setpoints.fwd_velocity = 0;
+				mb_setpoints.turn_velocity = 0;
+				break;
+		}
+		*/
+	}
 	// Update command velocities
     float vel = mb_setpoints.fwd_velocity;
     float avel = mb_setpoints.turn_velocity;
@@ -241,28 +300,16 @@ void balancebot_controller(){
     mb_state.psi_r = mb_state.psi_old + avel*DT;
     mb_state.psi_old = mb_state.psi_r;
 
-	
-    // Update odometry 
- 	mb_odometry_update(&mb_odometry, &mb_state);
-
     // Calculate controller outputs    
-	if(mb_setpoints.manual_ctl == 0){
+	if(mb_setpoints.manual_ctl == 0 || mb_setpoints.manual_ctl == 1){
     	//send motor commands
     	mb_controller_update(&mb_state, &mb_setpoints, &mb_odometry, &rob_data);
 		mb_motor_set(RIGHT_MOTOR, mb_state.right_cmd);
 		mb_motor_set(LEFT_MOTOR, mb_state.left_cmd);
-    	}else if(mb_setpoints.manual_ctl == 1){
-    	//send motor commands
-    	mb_controller_update(&mb_state, &mb_setpoints, &mb_odometry, &rob_data);
-		mb_motor_set(RIGHT_MOTOR, mb_state.right_cmd);
-		mb_motor_set(LEFT_MOTOR, mb_state.left_cmd);
-    	}
-
+    }
    	//unlock state mutex
     pthread_mutex_unlock(&state_mutex);
-
 }
-
 
 /*******************************************************************************
 *  setpoint_control_loop()
@@ -304,73 +351,19 @@ void* setpoint_control_loop(void* ptr){
 			}else if(dsm_ch7 == 1 && dsm_ch5 == -1){
 				/* Manual mode - Tune Outer Loop */
 				mb_setpoints.manual_ctl = 1;
-				//rob_data.kp2 += + 0.001 * rc_dsm_ch_normalized(2);
-				//rob_data.ki2 += + 0.0001 * rc_dsm_ch_normalized(4);
-				//rob_data.kd2 += + 0.0001* rc_dsm_ch_normalized(3);
-				rob_data.kp3 += + 0.001 * rc_dsm_ch_normalized(2);
-				rob_data.ki3 += + 0.001 * rc_dsm_ch_normalized(4);
-				rob_data.kd3 += + 0.001* rc_dsm_ch_normalized(3);
+				//rob_data.kp2 += 0.001 * rc_dsm_ch_normalized(2);
+				//rob_data.ki2 += 0.0001 * rc_dsm_ch_normalized(4);
+				//rob_data.kd2 += 0.0001* rc_dsm_ch_normalized(3);
+				rob_data.kp3 += 0.001 * rc_dsm_ch_normalized(2);
+				rob_data.ki3 += 0.001 * rc_dsm_ch_normalized(4);
+				rob_data.kd3 += 0.001* rc_dsm_ch_normalized(3);
 			}else if(dsm_ch7 == 1 && dsm_ch5 == 1){
 				/* Manual mode - Tune Inner Loop */
 				mb_setpoints.manual_ctl = 1;
 				rob_data.kp1 += 0.1 * rc_dsm_ch_normalized(2);
-				rob_data.ki1 += + 0.01 * rc_dsm_ch_normalized(4);
-				rob_data.kd1 += + 0.001* rc_dsm_ch_normalized(3);
-			}else if(dsm_ch7 == -1 && dsm_ch5 == 0){
-				/* Task mode - Default */
-				init_switch = 1;
-				left_turn_task = ROB_FORWARD;
-				left_turn_count = 0;
-			}else if(dsm_ch7 == -1 && dsm_ch5 == -1){
-				/* Task mode - Straight Line Drag Racing */
-				mb_setpoints.manual_ctl = 0;
-				if(init_switch) mb_odometry_copy(&tmp_odometry, &mb_odometry);
-				init_switch = 0;
-				distance = mb_odometry_distance(&mb_odometry, &tmp_odometry);
-				//mb_setpoints.fwd_velocity = velocity_mapping(0.0, distance, straight_distance, fwd_vel_max);
-				if(distance > straight_distance) mb_setpoints.fwd_velocity = 0;
-				else if(distance > 0.90*straight_distance) mb_setpoints.fwd_velocity = fwd_vel_max * 0.5;
-				else if(distance > 0.70*straight_distance) mb_setpoints.fwd_velocity = fwd_vel_max * 0.7;
-				else if(distance > 0.30*straight_distance) mb_setpoints.fwd_velocity = fwd_vel_max * 0.8;
-				else if(distance > 0.10*straight_distance) mb_setpoints.fwd_velocity = fwd_vel_max * 0.7;
-				else mb_setpoints.fwd_velocity = fwd_vel_max * 0.5;
-			}else if(dsm_ch7 == -1 && dsm_ch5 == 1){
-				/* Task mode - 4 Left Turns */
-				if(init_switch)	mb_odometry_copy(&tmp_odometry, &mb_odometry);
-				init_switch = 0;
-				// test code
-				mb_state.psi_r = tmp_odometry.psi + PI/2;
-				mb_state.psi_old = tmp_odometry.psi + PI/2;
-				mb_setpoints.turn_velocity = 0;
-				
-				switch (left_turn_task)
-				{
-					case ROB_FORWARD:
-						distance = mb_odometry_distance(&mb_odometry, &tmp_odometry);
-						if(distance >= left_turn_distance-0.1){
-							mb_setpoints.fwd_velocity = fwd_vel_max * 0.3;
-							left_turn_count ++;
-							if(left_turn_count >= 4) left_turn_task = ROB_STOP;
-							else left_turn_task = ROB_TURN;
-						}else mb_setpoints.fwd_velocity = fwd_vel_max * 0.5;
-						break;
-					case ROB_TURN:
-						mb_state.psi_r = tmp_odometry.psi + PI/2;
-						mb_state.psi_old = tmp_odometry.psi + PI/2;
-						if(abs(mb_state.psi_r-mb_odometry.psi) <= 0.04){
-							mb_setpoints.turn_velocity = 0;
-							left_turn_task = ROB_FORWARD;
-							init_switch = 1;
-						}else mb_setpoints.turn_velocity = turn_vel_max;
-						break;
-					case ROB_STOP:
-						mb_setpoints.fwd_velocity = 0;
-						mb_setpoints.turn_velocity = 0;
-						break;
-				}
-				
-
-			}else printf("ERROR: No DSM channel\n");
+				rob_data.ki1 += 0.01 * rc_dsm_ch_normalized(4);
+				rob_data.kd1 += 0.001* rc_dsm_ch_normalized(3);
+			}
 		}
 	 	rc_nanosleep(1E9 / RC_CTL_HZ);
 	}
@@ -438,7 +431,7 @@ void* printf_loop(void* ptr){
 			printf("%7.4f  |", mb_state.yaw);
 			printf("%7.4f  |", mb_state.psi_r);
 			printf("%7.4f  |", (mb_state.left_cmd-mb_state.right_cmd)/2);
-			//printf("%6.4f|", mpu_data.dmp_TaitBryan[TB_YAW_Z]);
+			
 			pthread_mutex_unlock(&state_mutex);
 			fflush(stdout);
 		}

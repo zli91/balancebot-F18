@@ -274,7 +274,6 @@ void balancebot_controller(){
 void* setpoint_control_loop(void* ptr){
 	int init_switch = 0;
 	float distance = 0;
-	float angles = 0;
 	int left_turn_task = ROB_FORWARD;
 	int left_turn_count = 0;
 	while(1){
@@ -337,28 +336,28 @@ void* setpoint_control_loop(void* ptr){
 				else mb_setpoints.fwd_velocity = fwd_vel_max * 0.5;
 			}else if(dsm_ch7 == -1 && dsm_ch5 == 1){
 				/* Task mode - 4 Left Turns */
-				if(init_switch){
-					mb_odometry_copy(&tmp_odometry, &mb_odometry);	
-				} 
+				if(init_switch)	mb_odometry_copy(&tmp_odometry, &mb_odometry);
 				init_switch = 0;
+				// test code
 				mb_state.psi_r = tmp_odometry.psi + PI/2;
 				mb_state.psi_old = tmp_odometry.psi + PI/2;
 				mb_setpoints.turn_velocity = 0;
-				/*
+				
 				switch (left_turn_task)
 				{
 					case ROB_FORWARD:
 						distance = mb_odometry_distance(&mb_odometry, &tmp_odometry);
-						if(distance >= left_turn_distance){
-							mb_setpoints.fwd_velocity = 0;
+						if(distance >= left_turn_distance-0.1){
+							mb_setpoints.fwd_velocity = fwd_vel_max * 0.3;
 							left_turn_count ++;
 							if(left_turn_count >= 4) left_turn_task = ROB_STOP;
 							else left_turn_task = ROB_TURN;
 						}else mb_setpoints.fwd_velocity = fwd_vel_max * 0.5;
 						break;
 					case ROB_TURN:
-						angles = mb_odometry_angles(&mb_odometry, &tmp_odometry);
-						if(angles >= PI/2-0.17){
+						mb_state.psi_r = tmp_odometry.psi + PI/2;
+						mb_state.psi_old = tmp_odometry.psi + PI/2;
+						if(abs(mb_state.psi_r-mb_odometry.psi) <= 0.04){
 							mb_setpoints.turn_velocity = 0;
 							left_turn_task = ROB_FORWARD;
 							init_switch = 1;
@@ -369,7 +368,7 @@ void* setpoint_control_loop(void* ptr){
 						mb_setpoints.turn_velocity = 0;
 						break;
 				}
-				*/
+				
 
 			}else printf("ERROR: No DSM channel\n");
 		}

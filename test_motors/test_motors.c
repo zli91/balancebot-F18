@@ -54,22 +54,19 @@ int main(){
 	while(rc_get_state()!=EXITING){
 		// handle other states
 		if(rc_get_state()==RUNNING){
-			
+			mb_motor_brake(1);
 			//run right forward for 1s
 			mb_motor_set(RIGHT_MOTOR, 0.8);
 			mb_motor_set(LEFT_MOTOR, 0.0);
 			printf("Right motor current: %f\n",mb_motor_read_current(RIGHT_MOTOR));
 			printf("Left motor current: %f\n",mb_motor_read_current(LEFT_MOTOR));
 			rc_nanosleep(1E9);
-			mb_motor_brake(1);
-			rc_nanosleep(1E9);
 			//run left forward for 1s
-			mb_motor_set(RIGHT_MOTOR, 0.8);
+			mb_motor_set(RIGHT_MOTOR, 0.0);
 			mb_motor_set(LEFT_MOTOR, 0.8);
 			printf("Right motor current: %f\n",mb_motor_read_current(RIGHT_MOTOR));
 			printf("Left motor current: %f\n",mb_motor_read_current(LEFT_MOTOR));
 			rc_nanosleep(1E9);
-			mb_motor_brake(0);
 			//run left backwards for 1s
 			mb_motor_set(RIGHT_MOTOR, 0.0);
 			mb_motor_set(LEFT_MOTOR, -0.8);
@@ -83,13 +80,13 @@ int main(){
 			printf("Left motor current: %f\n",mb_motor_read_current(LEFT_MOTOR));
 			rc_nanosleep(1E9);
 			//set both forwards for 1s
-			//mb_motor_brake(0);
+			mb_motor_brake(0);
 			mb_motor_set_all(0.8);
 			printf("Right motor current: %f\n",mb_motor_read_current(RIGHT_MOTOR));
 			printf("Left motor current: %f\n",mb_motor_read_current(LEFT_MOTOR));
 			rc_nanosleep(1E9);
 			//stop motors for 1s
-			//mb_motor_disable();
+			mb_motor_disable();
 			rc_nanosleep(2E9);
 		}
 		rc_nanosleep(1E9);

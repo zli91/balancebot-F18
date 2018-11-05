@@ -28,9 +28,13 @@
 rob_data_t rob_data;
 int dsm_ch5 = 0, dsm_ch7 = 0;
 const float straight_distance = 11.0; //meters 
-const float left_turn_distance = 1.0; // meters
-const float fwd_vel_max = 0.6;
-const float turn_vel_max = 2;
+float left_turn_distance = 1.0; // meters
+const float fwd_vel_max = 0.8;
+const float turn_vel_max = 4;
+int init_switch = 0;
+float distance = 0;
+int left_turn_task = ROB_FORWARD;
+int left_turn_count = 0;
 mb_odometry_t tmp_odometry;
 
 void robot_init(mb_state_t* mb_state, mb_setpoints_t* mb_setpoints, rob_data_t* rob_data){
@@ -45,9 +49,9 @@ void robot_init(mb_state_t* mb_state, mb_setpoints_t* mb_setpoints, rob_data_t* 
     rob_data-> ki2 = -0.0208;//-0.0021;
     rob_data-> kd2 = -0.0106;//-0.0133;
     
-    rob_data-> kp3 = 1.2;
-    rob_data-> ki3 = 0.4;
-    rob_data-> kd3 = 0.04;
+    rob_data-> kp3 = -2.0;
+    rob_data-> ki3 = -0.4;
+    rob_data-> kd3 = -0.04;
 
     rob_data-> body_angle = 0.023;
 
@@ -259,36 +263,43 @@ void balancebot_controller(){
 		if(init_switch)	mb_odometry_copy(&tmp_odometry, &mb_odometry);
 		init_switch = 0;
 		// test code
-		mb_state.psi_r = tmp_odometry.psi + PI/2;
-		mb_state.psi_old = tmp_odometry.psi + PI/2;
-		mb_setpoints.turn_velocity = 0;
 		/*
+		if(mb_state.psi_r - tmp_odometry.psi >= PI/2){
+			mb_state.psi_r = tmp_odometry.psi + PI/2;
+			mb_setpoints.turn_velocity = 0;
+		}else mb_setpoints.turn_velocity = turn_vel_max;
+		*/
 		switch (left_turn_task)
 		{
 			case ROB_FORWARD:
 				distance = mb_odometry_distance(&mb_odometry, &tmp_odometry);
-				if(distance >= left_turn_distance-0.1){
+				if(left_turn_count == 0) left_turn_distance = 0.85;
+				else if (left_turn_count == 3) left_turn_distance = 1.0;
+				else left_turn_distance = 0.80;
+				if(distance >= left_turn_distance){
 					mb_setpoints.fwd_velocity = fwd_vel_max * 0.3;
 					left_turn_count ++;
-					if(left_turn_count >= 4) left_turn_task = ROB_STOP;
+					if(left_turn_count >= 4){
+						left_turn_task = ROB_STOP;
+						left_turn_count = 0;
+					} 
 					else left_turn_task = ROB_TURN;
 				}else mb_setpoints.fwd_velocity = fwd_vel_max * 0.5;
 				break;
 			case ROB_TURN:
-				mb_state.psi_r = tmp_odometry.psi + PI/2;
-				mb_state.psi_old = tmp_odometry.psi + PI/2;
-				mb_setpoints.turn_velocity = 0;
-				if(abs(mb_state.psi_r-mb_odometry.psi) <= 0.04){
-					left_turn_task = ROB_FORWARD;
+				if(mb_state.psi_r - tmp_odometry.psi >= PI/2){
+					mb_state.psi_r = tmp_odometry.psi + PI/2;
+					mb_setpoints.turn_velocity = 0;
 					init_switch = 1;
-				}
+					left_turn_task = ROB_FORWARD;
+				}else mb_setpoints.turn_velocity = turn_vel_max * 0.70;
 				break;
 			case ROB_STOP:
 				mb_setpoints.fwd_velocity = 0;
 				mb_setpoints.turn_velocity = 0;
 				break;
 		}
-		*/
+		
 	}
 	// Update command velocities
     float vel = mb_setpoints.fwd_velocity;
@@ -319,10 +330,7 @@ void balancebot_controller(){
 *
 *******************************************************************************/
 void* setpoint_control_loop(void* ptr){
-	int init_switch = 0;
-	float distance = 0;
-	int left_turn_task = ROB_FORWARD;
-	int left_turn_count = 0;
+
 	while(1){
 		if(rc_dsm_is_new_data()){
 			if(rc_dsm_ch_normalized(7)>=0.9) dsm_ch7 = 1;
@@ -348,15 +356,17 @@ void* setpoint_control_loop(void* ptr){
 				mb_setpoints.manual_ctl = 1;
 				mb_setpoints.fwd_velocity = fwd_vel_max * rc_dsm_ch_normalized(3);
 				mb_setpoints.turn_velocity = turn_vel_max * rc_dsm_ch_normalized(4);
+				rob_data.body_angle = 0.1 * rc_dsm_ch_normalized(1);
+				// mb_setpoints.psi_r = PI/2 * rc_dsm_ch_normalized(4);
 			}else if(dsm_ch7 == 1 && dsm_ch5 == -1){
 				/* Manual mode - Tune Outer Loop */
 				mb_setpoints.manual_ctl = 1;
-				//rob_data.kp2 += 0.001 * rc_dsm_ch_normalized(2);
-				//rob_data.ki2 += 0.0001 * rc_dsm_ch_normalized(4);
-				//rob_data.kd2 += 0.0001* rc_dsm_ch_normalized(3);
-				rob_data.kp3 += 0.001 * rc_dsm_ch_normalized(2);
-				rob_data.ki3 += 0.001 * rc_dsm_ch_normalized(4);
-				rob_data.kd3 += 0.001* rc_dsm_ch_normalized(3);
+				rob_data.kp2 += 0.001 * rc_dsm_ch_normalized(2);
+				rob_data.ki2 += 0.0001 * rc_dsm_ch_normalized(4);
+				rob_data.kd2 += 0.0001* rc_dsm_ch_normalized(3);
+				//rob_data.kp3 += 0.01 * rc_dsm_ch_normalized(2);
+				//rob_data.ki3 += 0.001 * rc_dsm_ch_normalized(4);
+				//rob_data.kd3 += 0.001* rc_dsm_ch_normalized(3);
 			}else if(dsm_ch7 == 1 && dsm_ch5 == 1){
 				/* Manual mode - Tune Inner Loop */
 				mb_setpoints.manual_ctl = 1;
@@ -424,14 +434,15 @@ void* printf_loop(void* ptr){
 			printf("%7.3f  |", rob_data.kp1);
 			printf("%7.3f  |", rob_data.ki1);
 			printf("%7.3f  |", rob_data.kd1);
-			printf("%7.4f  |", rob_data.kp3);
-			printf("%7.4f  |", rob_data.ki3);
-			printf("%7.4f  |", rob_data.kd3);
+			printf("%7.4f  |", rob_data.kp2);
+			printf("%7.4f  |", rob_data.ki2);
+			printf("%7.4f  |", rob_data.kd2);
 			printf("%7.3f  |", mb_setpoints.fwd_velocity);
 			printf("%7.4f  |", mb_state.yaw);
 			printf("%7.4f  |", mb_state.psi_r);
 			printf("%7.4f  |", (mb_state.left_cmd-mb_state.right_cmd)/2);
-			
+			printf("%7.4f  |", rob_data.body_angle);
+
 			pthread_mutex_unlock(&state_mutex);
 			fflush(stdout);
 		}

@@ -124,8 +124,8 @@ int mb_controller_update(mb_state_t* mb_state, mb_setpoints_t* mb_setpoints, mb_
     float duty = controller_march(&inner_loop, theta_r - mb_state->theta , -1.0, 1.0);
 
     // Turning Loop
-    controller_set_pid(&turning_loop, rob_data->kp3, rob_data->ki3, rob_data->kd3, 0.0001, DT);
-    float diff_duty = controller_march(&turning_loop, - mb_state->psi_r + mb_odometry->psi , -0.8, 0.8);
+    controller_set_pid(&turning_loop, rob_data->kp3, rob_data->ki3, rob_data->kd3, 0.01, DT);
+    float diff_duty = controller_march(&turning_loop, mb_state->psi_r - mb_odometry->psi , -0.8, 0.8);
 
     if(duty + diff_duty < -1.0) mb_state->left_cmd = -1.0;
     else if(duty + diff_duty > 1.0) mb_state->left_cmd = 1.0;

@@ -19,13 +19,21 @@
 #include <rc/encoder_eqep.h>
 #include <rc/time.h>
 
+#include <sys/types.h>
+#include <inttypes.h>
+#include <sys/ioctl.h>
+
+#include "../lcmtypes/balancebot_msg_t.h"
+#include "../lcmtypes/pose_xyt_t.h"
+#include "../lcmtypes/balancebot_gate_t.h"
+
+#include "../optitrack/common/serial.h"
+
+
 #include "balancebot.h"
 
-/*******************************************************************************
-* int main() 
-*
-*******************************************************************************/
 rob_data_t rob_data;
+mb_odometry_t tmp_odometry;
 int dsm_ch5 = 0, dsm_ch7 = 0;
 const float straight_distance = 11.0; //meters 
 float left_turn_distance = 1.0; // meters
@@ -35,7 +43,57 @@ int init_switch = 0;
 float distance = 0;
 int left_turn_task = ROB_FORWARD;
 int left_turn_count = 0;
-mb_odometry_t tmp_odometry;
+
+/* Motion Capture Parameters */
+FILE* f1;
+const int baudRate = 57600;
+const char port[] = "/dev/ttyO5";
+const char headByte = 0x1B;
+const char tailByte = 0xFF;
+int num_gates = 4;
+int fd;
+uint64_t last_utime = 0;
+int bytes_avail = 0;
+int err_counter = 0;
+balancebot_msg_t BBmsg;
+pose_xyt_t BBpose;
+balancebot_gate_t BBgates[num_gates];
+/*****************************/
+
+void getData(balancebot_msg_t* BBmsg){
+    char *ptr;
+    int packetLength = balancebot_msg_t_encoded_size(BBmsg)+2;
+    char *dataPacket = (char*) malloc (packetLength);
+    ptr = dataPacket;
+    while(read(fd, ptr, 1) > 0){
+        // if the first Byte is wrong keep looking
+        if((ptr == dataPacket)&&(*ptr != headByte)){
+            continue;
+        }
+        ptr++;
+        // Once we have all of the Bytes check to make sure first and last are good
+        if((ptr-dataPacket) == packetLength){
+            if((dataPacket[0] != headByte) || (dataPacket[packetLength-1] != tailByte)){
+                err_counter += 1;
+            } 
+            else{
+                //packet is good, decode it into BBmsg
+                int status = balancebot_msg_t_decode(dataPacket, 1, packetLength-2, BBmsg);
+                if (status < 0) {
+                    fprintf (stderr, "error %d decoding balancebot_msg_t!!!\n", status);;
+                }
+                // if we have less than a full message in the serial buffer
+                // we are done, we'll get the next one next time
+                ioctl(fd, FIONREAD, &bytes_avail);
+                if(bytes_avail < packetLength){
+                    break;
+                }
+            }
+            //keep reading until buffer is almost empty
+            ptr = dataPacket;
+        }
+    }
+}
 
 void robot_init(mb_state_t* mb_state, mb_setpoints_t* mb_setpoints, rob_data_t* rob_data){
 	rc_encoder_eqep_write(1, 0);
@@ -75,16 +133,10 @@ void position_init(){
 	rc_encoder_eqep_write(2, 0);
 }
 
-float velocity_mapping(float initial, float current, float target, float max_speed){
-	if (current-initial<=0) return 0.5 * max_speed;
-	else if(current-target<=0) return 0;
-	else{
-		float alpha = target - initial;
-		float beta = 0.5 * max_speed;
-		float x = current - initial;
-		return -4*beta/pow(x/alpha,2) + 4*beta/alpha*x + (0.3 * max_speed);
-	}
-}
+/*******************************************************************************
+* int main() 
+*
+*******************************************************************************/
 
 int main(){
 	// make sure another instance isn't running
@@ -141,6 +193,9 @@ int main(){
 
 
 	// TODO: start motion capture message recieve thread
+	printf("starting motion capture thread... \n");
+	pthread_t  motion_capture_thread;
+	rc_pthread_create(&motion_capture_thread, motion_capture_loop, (void*) NULL, SCHED_OTHER, 0);
 
 	// set up IMU configuration
 	printf("initializing imu... \n");
@@ -156,11 +211,12 @@ int main(){
 		return -1;
 	}
 
-	//rc_nanosleep(5E9); // wait for imu to stabilize
+	rc_nanosleep(5E9); // wait for imu to stabilize
 
 	//initialize state mutex
     pthread_mutex_init(&state_mutex, NULL);
     pthread_mutex_init(&setpoint_mutex, NULL);
+	pthread_mutex_init(&motion_mutex, NULL);
 
 	//attach controller function to IMU interrupt
 	printf("initializing controller...\n");
@@ -262,13 +318,6 @@ void balancebot_controller(){
 		/* Task mode - 4 Left Turns */
 		if(init_switch)	mb_odometry_copy(&tmp_odometry, &mb_odometry);
 		init_switch = 0;
-		// test code
-		/*
-		if(mb_state.psi_r - tmp_odometry.psi >= PI/2){
-			mb_state.psi_r = tmp_odometry.psi + PI/2;
-			mb_setpoints.turn_velocity = 0;
-		}else mb_setpoints.turn_velocity = turn_vel_max;
-		*/
 		switch (left_turn_task)
 		{
 			case ROB_FORWARD:
@@ -450,3 +499,32 @@ void* printf_loop(void* ptr){
 	}
 	return NULL;
 } 
+
+void* motion_capture_loop(void* ptr){
+	//open serial port non-blocking
+    fd = serial_open(port,baudRate,0);
+
+    if(fd == -1){
+        printf("Failed to open Serial Port: %s", port);
+        return -1;
+    }
+
+    //construct message for storage
+    BBmsg.pose = BBpose;
+    BBmsg.num_gates = num_gates;
+    BBmsg.gates = BBgates;
+    int packetLength = balancebot_msg_t_encoded_size(&BBmsg)+2;
+    while(1)
+    {
+        //check bytes in serial buffer
+        ioctl(fd, FIONREAD, &bytes_avail);
+        //printf("bytes: %d\n",bytes_avail);
+        if(bytes_avail >= packetLength){
+            getData(&BBmsg);
+            printData(BBmsg);
+        }
+        rc_nanosleep(1E9/MOTION_CAP_HZ);
+    }
+    serial_close(fd);
+	return NULL;
+}

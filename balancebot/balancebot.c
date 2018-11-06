@@ -216,7 +216,6 @@ int main(){
 	//initialize state mutex
     pthread_mutex_init(&state_mutex, NULL);
     pthread_mutex_init(&setpoint_mutex, NULL);
-	pthread_mutex_init(&motion_mutex, NULL);
 
 	//attach controller function to IMU interrupt
 	printf("initializing controller...\n");
@@ -519,11 +518,12 @@ void* motion_capture_loop(void* ptr){
         //check bytes in serial buffer
         ioctl(fd, FIONREAD, &bytes_avail);
         //printf("bytes: %d\n",bytes_avail);
-        if(bytes_avail >= packetLength){
-            getData(&BBmsg);
-            printData(BBmsg);
-        }
-        rc_nanosleep(1E9/MOTION_CAP_HZ);
+		
+		pthread_mutex_lock(&state_mutex);
+        if(bytes_avail >= packetLength) getData(&BBmsg);
+		pthread_mutex_unlock(&state_mutex);
+		
+		rc_nanosleep(1E9/MOTION_CAP_HZ);
     }
     serial_close(fd);
 	return NULL;

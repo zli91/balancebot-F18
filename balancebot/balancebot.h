@@ -19,7 +19,6 @@
 rc_mpu_data_t mpu_data;
 pthread_mutex_t state_mutex;
 pthread_mutex_t setpoint_mutex;
-pthread_mutex_t motion_mutex;
 
 mb_state_t mb_state;
 mb_setpoints_t mb_setpoints;

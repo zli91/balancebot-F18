@@ -228,7 +228,7 @@ int main(){
 	// TODO: start motion capture message recieve thread
 	printf("starting motion capture thread... \n");
 	pthread_t  motion_capture_thread;
-	rc_pthread_create(&motion_capture_thread, motion_capture_loop, (void*) NULL, SCHED_OTHER, 0);
+	rc_pthread_create(&motion_capture_thread, motion_capture_loop, (void*) NULL, SCHED_FIFO, 50);
 
 	// set up IMU configuration
 	printf("initializing imu... \n");

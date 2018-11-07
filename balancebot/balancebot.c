@@ -415,24 +415,15 @@ void balancebot_controller(){
 			case RTR_T:
 				mb_state.forward_velocity = forward_velocity_control(&mb_state, init_phi, target_distance);
 				if(mb_state.forward_velocity == 0){
-					optitrak_task = RTR_R2;
 					copy_switch = 1;
-				}
-				break;
-			case RTR_R2:
-				mb_setpoints.turn_velocity = turn_velocity_control(&mb_state, init_psi, array_odometry[cnt_num_odom].psi);
-				if(mb_setpoints.turn_velocity == 0){
 					optitrak_task = RTR_R1;
 					cnt_num_odom ++;
-					copy_switch = 1;
 				}
 				if(cnt_num_odom > num_odometry-1) optitrak_task = RTR_STOP; 
 				break;
 			case RTR_STOP:
 				break;
 		}
-
-
 	}
 	// Update command velocities
     float vel = mb_setpoints.fwd_velocity; // (rad/sec)
@@ -488,7 +479,7 @@ void* setpoint_control_loop(void* ptr){
 				mb_setpoints.manual_ctl = 1;
 				mb_setpoints.fwd_velocity = FWD_VEL_MAX * rc_dsm_ch_normalized(3);
 				mb_setpoints.turn_velocity = TURN_VEL_MAX * rc_dsm_ch_normalized(4);
-				rob_data.body_angle = 0.1 * rc_dsm_ch_normalized(1);
+				//rob_data.body_angle = 0.1 * rc_dsm_ch_normalized(1);
 				// mb_setpoints.psi_r = PI/2 * rc_dsm_ch_normalized(4);
 			}else if(dsm_ch7 == 1 && dsm_ch5 == -1){
 				/* Manual mode - Tune Outer Loop */
@@ -530,7 +521,8 @@ void* printf_loop(void* ptr){
 			printf("\nRUNNING: Hold upright to balance.\n");
 			printf("                 SENSORS               |");
 			printf("           ODOMETRY          |");
-			printf("                            PID                            |");
+			printf("           OPTITRAK          |");
+			//printf("                            PID                            |");
 			printf("\n");
 			printf("    θ    |");
 			printf("    φ    |");
@@ -539,12 +531,15 @@ void* printf_loop(void* ptr){
 			printf("    X    |");
 			printf("    Y    |");
 			printf("    ψ    |");
-			printf("   KP1   |");
-			printf("   KI1   |");
-			printf("   KD1   |");
-			printf("   KP2   |");
-			printf("   KI2   |");
-			printf("   KD2   |");
+			printf("    X    |");
+			printf("    Y    |");
+			printf("    ψ    |");
+			//printf("   KP1   |");
+			//printf("   KI1   |");
+			//printf("   KD1   |");
+			//printf("   KP2   |");
+			//printf("   KI2   |");
+			//printf("   KD2   |");
 			printf("\n");
 		}
 		else if(new_state==PAUSED && last_state!=PAUSED){
@@ -563,17 +558,20 @@ void* printf_loop(void* ptr){
 			printf("%7.3f  |", mb_odometry.x);
 			printf("%7.3f  |", mb_odometry.y);
 			printf("%7.3f  |", mb_odometry.psi);
-			printf("%7.3f  |", rob_data.kp1);
-			printf("%7.3f  |", rob_data.ki1);
-			printf("%7.3f  |", rob_data.kd1);
-			printf("%7.4f  |", rob_data.kp2);
-			printf("%7.4f  |", rob_data.ki2);
-			printf("%7.4f  |", rob_data.kd2);
-			printf("%7.3f  |", mb_setpoints.fwd_velocity);
-			printf("%7.4f  |", mb_state.yaw);
-			printf("%7.4f  |", mb_state.psi_r);
-			printf("%7.4f  |", (mb_state.left_cmd-mb_state.right_cmd)/2);
-			printf("%7.4f  |", rob_data.body_angle);
+			printf("%7.3f  |", BBmsg.pose.x);
+			printf("%7.3f  |", BBmsg.pose.y);
+			printf("%7.3f  |", BBmsg.pose.theta);
+			//printf("%7.3f  |", rob_data.kp1);
+			//printf("%7.3f  |", rob_data.ki1);
+			//printf("%7.3f  |", rob_data.kd1);
+			//printf("%7.4f  |", rob_data.kp2);
+			//printf("%7.4f  |", rob_data.ki2);
+			//printf("%7.4f  |", rob_data.kd2);
+			//printf("%7.3f  |", mb_setpoints.fwd_velocity);
+			//printf("%7.4f  |", mb_state.yaw);
+			//printf("%7.4f  |", mb_state.psi_r);
+			//printf("%7.4f  |", (mb_state.left_cmd-mb_state.right_cmd)/2);
+			//printf("%7.4f  |", rob_data.body_angle);
 
 			pthread_mutex_unlock(&state_mutex);
 			fflush(stdout);

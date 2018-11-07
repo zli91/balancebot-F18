@@ -3,13 +3,13 @@ TARGET = ../bin/balancebot
 
 CC			:= gcc
 LINKER		:= gcc -o
-CFLAGS		:= -std=c99 -c -Wall -g `pkg-config --cflags lcm`
+CFLAGS		:= -c -Wall -g `pkg-config --cflags lcm`
 LFLAGS		:= -lm -lrt -lpthread -l:librobotcontrol.so.1 -L `pkg-config --libs lcm`
 
 SOURCES		:= $(wildcard *.c)
-SOURCES		:= $(SOURCES) $(wildcard ../common/*.c)
+SOURCES		:= $(SOURCES) $(wildcard ../common/*.c) $(wildcard ../optitrack/common/*.c)
 INCLUDES	:= $(wildcard *.h)
-INCLUDES	:= $(INCLUDES) $(wildcard ../common/*.h)
+INCLUDES	:= $(INCLUDES) $(wildcard ../common/*.h) $(wildcard ../optitrack/common/*.h)
 OBJECTS		:= $(SOURCES:$%.c=$%.o)
 LCMTYPES    := $(shell find ../lcmtypes/ -name '*.lcm')                        
 LCMOBJS     := $(LCMTYPES:$%.lcm=$%.o) 

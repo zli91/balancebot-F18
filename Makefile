@@ -2,7 +2,8 @@ all:
 	@make -C lcmtypes
 	@make -C balancebot --no-print-directory
 	@make -C measure_motors --no-print-directory
-	@make -C test_motors --no-print-directory                                                       
+	@make -C test_motors --no-print-directory  
+	@make -C optitrack --no-print-directory                               
 
 lcmtypes:
 	@make -C lcmtypes
@@ -18,3 +19,4 @@ clean:
 	@make -C test_motors -s clean
 	@make -C lcmtypes -s clean                                                
 	@make -C java -s clean
+	@make -C optitrack -s clean

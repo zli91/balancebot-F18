@@ -20,6 +20,7 @@
 #include "../optitrack/common/serial.h"
 
 FILE* f1;
+FILE* ptr_file;
 const int baudRate = 57600;
 const char port[] = "/dev/ttyO5";
 const char headByte = 0x1B;
@@ -144,6 +145,18 @@ void printData(balancebot_msg_t BBmsg){
     if(BBmsg.num_gates > 0){
         printf("%+7.6f|"  ,(BBmsg.gates[0].left_post[0]+BBmsg.gates[0].right_post[0])/2.0);
         printf("%+7.6f|"  ,(BBmsg.gates[0].left_post[1]+BBmsg.gates[0].right_post[1])/2.0);
+    }
+    if(BBmsg.num_gates == 4){
+        ptr_file = fopen("gates.txt","w");
+        if(!ptr_file){
+
+        }else{
+            int i = 0;
+            for(i=0;i<4;i++){
+                fprintf(ptr_file,"%f\t%f\t%f\t%f\n",BBmsg.gates[i].left_post[0], BBmsg.gates[i].left_post[1], BBmsg.gates[i].right_post[0], BBmsg.gates[i].right_post[1]); 
+            }
+            fclose(ptr_file);
+        }
     }
     printf("         \r");
     fflush(stdout);

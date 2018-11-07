@@ -22,6 +22,7 @@
 #include <sys/types.h>
 #include <inttypes.h>
 #include <sys/ioctl.h>
+#include <string.h>
 
 #include "../lcmtypes/balancebot_msg_t.h"
 #include "../lcmtypes/pose_xyt_t.h"
@@ -34,8 +35,8 @@
 
 rob_data_t rob_data;
 mb_odometry_t tmp_odometry;
-mb_odometry_t array_odometry[3];
-const int num_odometry = 3;
+mb_odometry_t array_odometry[9];
+const int num_odometry = 9;
 int cnt_num_odom = 0;
 int optitrak_task = RTR_R1;
 int copy_switch = 0;
@@ -67,7 +68,7 @@ int bytes_avail = 0;
 int err_counter = 0;
 balancebot_msg_t BBmsg;
 pose_xyt_t BBpose;
-balancebot_gate_t BBgates[num_gates];
+balancebot_gate_t BBgates[4];
 /*****************************/
 
 void getData(balancebot_msg_t* BBmsg){
@@ -145,25 +146,29 @@ void position_init(){
 
 float turn_velocity_control(mb_state_t* mb_state, float initial_psi, float final_psi){
 	float dpsi = final_psi - initial_psi;
+	if(dpsi>PI) final_psi -= 2*PI;
+	else if(dpsi<-PI) final_psi += 2*PI;
+	dpsi = final_psi - initial_psi;
 	float psi_error = final_psi - mb_state->psi_old;
-	float turn_velocity = TURN_VEL_MAX * 1.5 * psi_error;
+	float turn_velocity = TURN_VEL_MAX * 1.0 * psi_error;
 	if( (dpsi >= 0 && psi_error <= 0.018) || (dpsi < 0 && psi_error >= -0.018)){
 		mb_state->psi_r = final_psi;
-		return 0;
-	}else if(turn_velocity >= 0.8 * TURN_VEL_MAX) return 0.8 * TURN_VEL_MAX;
+		return 0.0;
+	}else if(turn_velocity >= 0.6 * TURN_VEL_MAX) return 0.6 * TURN_VEL_MAX;
+	else if(turn_velocity <= -0.6 * TURN_VEL_MAX) return -0.6 * TURN_VEL_MAX;
 	else return turn_velocity;
 }
 
-void forward_velocity_control(mb_state_t* mb_state, float initial_phi, float distance){
+float forward_velocity_control(mb_state_t* mb_state, float initial_phi, float distance){
 	float rad = distance/(0.5*WHEEL_DIAMETER);
 	float phi_target = initial_phi + rad; 
 	float phi_error = phi_target - mb_state->phi_old;
-	float forward_velocity = FORWARD_VEL_MAX * 0.125 * phi_error;
-	if( rad >= 0 && phi_error <= 0.18) || (rad < 0 && phi_error >= -0.18)){
+	float forward_velocity = FWD_VEL_MAX * 0.05 * phi_error;
+	if( (rad >= 0 && phi_error <= 0.18) || (rad < 0 && phi_error >= -0.18)){
 		mb_state->phi_r = phi_target;
-		return 0;
-	}else if(turn_velocity >= 0.6 * TURN_VEL_MAX) return 0.6 * TURN_VEL_MAX;
-	else return turn_velocity;
+		return 0.0;
+	}else if(forward_velocity >= 0.4 * FWD_VEL_MAX) return 0.4 * FWD_VEL_MAX;
+	else return forward_velocity;
 }
 
 /*******************************************************************************
@@ -391,12 +396,37 @@ void balancebot_controller(){
 			mb_state.psi_old = 0;
 			copy_switch = 1;
 			cnt_num_odom = 0;
-			mb_odometry_init(&array_odometry[0], 0.5, 0.0, 0.0);
-			mb_odometry_init(&array_odometry[1], 0.5, 0.5, 0.0);
-			mb_odometry_init(&array_odometry[2], 0.0, 0.5, 0.0);
+			optitrak_task = RTR_R1;
+			/*
+			mb_odometry_init(&array_odometry[0], 0.6, 0.0, 0.0);
+			mb_odometry_init(&array_odometry[1], 0.6, 0.6, 0.0);
+			mb_odometry_init(&array_odometry[2], 0.0, 0.6, 0.0);
+			mb_odometry_init(&array_odometry[3], 0.0, 0.0, 0.0);
+			mb_odometry_init(&array_odometry[4], 0.6, 0.0, 0.0);
+			mb_odometry_init(&array_odometry[5], 0.6, 0.6, 0.0);
+			mb_odometry_init(&array_odometry[6], 0.0, 0.6, 0.0);
+			mb_odometry_init(&array_odometry[7], 0.0, 0.0, 0.0);
+			*/
+			mb_odometry_init(&array_odometry[0], 1.2, 0.0, 0.0);
+			mb_odometry_init(&array_odometry[1], 1.5,-0.6, 0.0);
+			mb_odometry_init(&array_odometry[2], 2.7,-0.6, 0.0);
+			mb_odometry_init(&array_odometry[3], 2.7, 0.9, 0.0);
+			mb_odometry_init(&array_odometry[4], 1.8, 0.0, 0.0);
+			mb_odometry_init(&array_odometry[5], 1.5, 0.3, 0.0);
+			mb_odometry_init(&array_odometry[6], 1.5, 1.2, 0.0);
+			mb_odometry_init(&array_odometry[7], 0.9, 1.2, 0.0);
+			mb_odometry_init(&array_odometry[8], 0.9, 0.0, 0.0);
+			
 		}
 		if(copy_switch){
 			init_phi = mb_state.phi;
+			if(mb_odometry.psi >= 2*PI){
+				mb_odometry.psi -= 2*PI;
+				mb_state.psi_old -= 2*PI;	
+			}else if(mb_odometry.psi <= -2*PI){
+				mb_odometry.psi += 2*PI;
+				mb_state.psi_old += 2*PI;
+			}
 			init_psi = mb_odometry.psi;
 			target_psi = atan2(array_odometry[cnt_num_odom].y-mb_odometry.y, array_odometry[cnt_num_odom].x-mb_odometry.x);
 			target_distance = mb_odometry_distance(&array_odometry[cnt_num_odom], &mb_odometry);
@@ -408,20 +438,26 @@ void balancebot_controller(){
 			case RTR_R1:
 				mb_setpoints.turn_velocity = turn_velocity_control(&mb_state, init_psi, target_psi);
 				if(mb_setpoints.turn_velocity == 0){
-					optitrak_task = RTR_T;
-					copy_switch = 1;
+					if(abs(mb_odometry.psi - mb_state.psi_r) < 0.005){
+						optitrak_task = RTR_T;
+						copy_switch = 1;
+					}
 				}
 				break;
 			case RTR_T:
-				mb_state.forward_velocity = forward_velocity_control(&mb_state, init_phi, target_distance);
-				if(mb_state.forward_velocity == 0){
-					copy_switch = 1;
-					optitrak_task = RTR_R1;
-					cnt_num_odom ++;
+				mb_setpoints.fwd_velocity = forward_velocity_control(&mb_state, init_phi, target_distance);
+				if(mb_setpoints.fwd_velocity == 0){
+					if(abs(mb_state.phi-mb_state.phi_r) < 0.05){
+						copy_switch = 1;
+						optitrak_task = RTR_R1;
+						cnt_num_odom ++;
+					}
 				}
 				if(cnt_num_odom > num_odometry-1) optitrak_task = RTR_STOP; 
 				break;
 			case RTR_STOP:
+				mb_setpoints.fwd_velocity = 0;
+				mb_setpoints.turn_velocity = 0;
 				break;
 		}
 	}
@@ -534,12 +570,12 @@ void* printf_loop(void* ptr){
 			printf("    X    |");
 			printf("    Y    |");
 			printf("    ψ    |");
-			//printf("   KP1   |");
-			//printf("   KI1   |");
-			//printf("   KD1   |");
-			//printf("   KP2   |");
-			//printf("   KI2   |");
-			//printf("   KD2   |");
+			printf("   KP1   |");
+			printf("   KI1   |");
+			printf("   KD1   |");
+			printf("   KP2   |");
+			printf("   KI2   |");
+			printf("   KD2   |");
 			printf("\n");
 		}
 		else if(new_state==PAUSED && last_state!=PAUSED){
@@ -548,6 +584,7 @@ void* printf_loop(void* ptr){
 		last_state = new_state;
 		
 		if(new_state == RUNNING){
+			
 			printf("\r");
 			//Add Print stattements here, do not follow with /n
 			pthread_mutex_lock(&state_mutex);
@@ -561,18 +598,19 @@ void* printf_loop(void* ptr){
 			printf("%7.3f  |", BBmsg.pose.x);
 			printf("%7.3f  |", BBmsg.pose.y);
 			printf("%7.3f  |", BBmsg.pose.theta);
-			//printf("%7.3f  |", rob_data.kp1);
-			//printf("%7.3f  |", rob_data.ki1);
-			//printf("%7.3f  |", rob_data.kd1);
-			//printf("%7.4f  |", rob_data.kp2);
-			//printf("%7.4f  |", rob_data.ki2);
-			//printf("%7.4f  |", rob_data.kd2);
+			printf("%7.3f  |", rob_data.kp1);
+			printf("%7.3f  |", rob_data.ki1);
+			printf("%7.3f  |", rob_data.kd1);
+			printf("%7.4f  |", rob_data.kp2);
+			printf("%7.4f  |", rob_data.ki2);
+			printf("%7.4f  |", rob_data.kd2);
 			//printf("%7.3f  |", mb_setpoints.fwd_velocity);
 			//printf("%7.4f  |", mb_state.yaw);
 			//printf("%7.4f  |", mb_state.psi_r);
 			//printf("%7.4f  |", (mb_state.left_cmd-mb_state.right_cmd)/2);
 			//printf("%7.4f  |", rob_data.body_angle);
-
+			
+			//printf("%f\t%f\t%f\t%f\t\n", mb_odometry.x, mb_odometry.y, BBmsg.pose.x, BBmsg.pose.y );
 			pthread_mutex_unlock(&state_mutex);
 			fflush(stdout);
 		}
@@ -587,7 +625,7 @@ void* motion_capture_loop(void* ptr){
 
     if(fd == -1){
         printf("Failed to open Serial Port: %s", port);
-        return -1;
+        return NULL;
     }
 
     //construct message for storage

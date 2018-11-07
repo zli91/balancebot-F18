@@ -30,5 +30,6 @@ void balancebot_controller();
 //threads
 void* setpoint_control_loop(void* ptr);
 void* printf_loop(void* ptr);
+void* motion_capture_loop(void* ptr);
 
 #endif

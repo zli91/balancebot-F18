@@ -34,6 +34,16 @@
 
 rob_data_t rob_data;
 mb_odometry_t tmp_odometry;
+mb_odometry_t array_odometry[3];
+const int num_odometry = 3;
+int cnt_num_odom = 0;
+int optitrak_task = RTR_R1;
+int copy_switch = 0;
+float init_phi = 0;
+float init_psi = 0;
+float target_psi = 0;
+float target_distance = 0;
+
 int dsm_ch5 = 0, dsm_ch7 = 0;
 const float STRAIGHT_DISTANCE = 11.0; //meters 
 float left_turn_distance = 1.0; // meters
@@ -133,12 +143,12 @@ void position_init(){
 	rc_encoder_eqep_write(2, 0);
 }
 
-float turn_velocity_control(mb_state_t* mb_state, float initial_psi, float dpsi){
-	float psi_target = initial_psi + dpsi;
-	float psi_error = psi_target - mb_state->psi_old;
+float turn_velocity_control(mb_state_t* mb_state, float initial_psi, float final_psi){
+	float dpsi = final_psi - initial_psi;
+	float psi_error = final_psi - mb_state->psi_old;
 	float turn_velocity = TURN_VEL_MAX * 1.5 * psi_error;
 	if( (dpsi >= 0 && psi_error <= 0.018) || (dpsi < 0 && psi_error >= -0.018)){
-		mb_state->psi_r = psi_target;
+		mb_state->psi_r = final_psi;
 		return 0;
 	}else if(turn_velocity >= 0.8 * TURN_VEL_MAX) return 0.8 * TURN_VEL_MAX;
 	else return turn_velocity;
@@ -372,8 +382,57 @@ void balancebot_controller(){
 				break;
 		}
 	}else if(dsm_ch7 == 0 && dsm_ch5 == 1){
-		/* Auto mode - Empty channel */
+		/* Task mode - Optitrak */
 		mb_setpoints.manual_ctl = 0;
+		if(init_switch){
+			/* initialize odometry to world coordinates 
+			   and generate all the waypoints */
+			mb_odometry_init(&mb_odometry, 0.0, 0.0, 0.0); //Initialize to Optitrak coordinate
+			mb_state.psi_old = 0;
+			copy_switch = 1;
+			cnt_num_odom = 0;
+			mb_odometry_init(&array_odometry[0], 0.5, 0.0, 0.0);
+			mb_odometry_init(&array_odometry[1], 0.5, 0.5, 0.0);
+			mb_odometry_init(&array_odometry[2], 0.0, 0.5, 0.0);
+		}
+		if(copy_switch){
+			init_phi = mb_state.phi;
+			init_psi = mb_odometry.psi;
+			target_psi = atan2(array_odometry[cnt_num_odom].y-mb_odometry.y, array_odometry[cnt_num_odom].x-mb_odometry.x);
+			target_distance = mb_odometry_distance(&array_odometry[cnt_num_odom], &mb_odometry);
+		} 
+		init_switch = 0;
+		copy_switch = 0;
+		switch (optitrak_task)
+		{
+			case RTR_R1:
+				mb_setpoints.turn_velocity = turn_velocity_control(&mb_state, init_psi, target_psi);
+				if(mb_setpoints.turn_velocity == 0){
+					optitrak_task = RTR_T;
+					copy_switch = 1;
+				}
+				break;
+			case RTR_T:
+				mb_state.forward_velocity = forward_velocity_control(&mb_state, init_phi, target_distance);
+				if(mb_state.forward_velocity == 0){
+					optitrak_task = RTR_R2;
+					copy_switch = 1;
+				}
+				break;
+			case RTR_R2:
+				mb_setpoints.turn_velocity = turn_velocity_control(&mb_state, init_psi, array_odometry[cnt_num_odom].psi);
+				if(mb_setpoints.turn_velocity == 0){
+					optitrak_task = RTR_R1;
+					cnt_num_odom ++;
+					copy_switch = 1;
+				}
+				if(cnt_num_odom > num_odometry-1) optitrak_task = RTR_STOP; 
+				break;
+			case RTR_STOP:
+				break;
+		}
+
+
 	}
 	// Update command velocities
     float vel = mb_setpoints.fwd_velocity; // (rad/sec)
@@ -418,6 +477,7 @@ void* setpoint_control_loop(void* ptr){
 			if(dsm_ch7 == 0 && dsm_ch5 ==0){
 				/* Auto mode - Default */
 				mb_setpoints.manual_ctl = 0;
+				init_switch = 1;
 				mb_setpoints.fwd_velocity = 0;
 				mb_setpoints.turn_velocity = 0;
 			}else if(dsm_ch7 == 0 && dsm_ch5 == -1){

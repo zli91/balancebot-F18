@@ -35,9 +35,13 @@
 #define RC_CTL_HZ               25    // rate of RC data update
 #define MOTION_CAP_HZ           100    // rate of Optitrak data update
 
-
 #define ROB_FORWARD             0
 #define ROB_TURN                1
 #define ROB_STOP                2
+
+#define RTR_R1                  0
+#define RTR_T                   1
+#define RTR_R2                  2
+#define RTR_STOP                3
 
 #endif

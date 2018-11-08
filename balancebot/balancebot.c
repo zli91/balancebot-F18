@@ -35,8 +35,8 @@
 
 rob_data_t rob_data;
 mb_odometry_t tmp_odometry;
-mb_odometry_t array_odometry[9];
-const int num_odometry = 9;
+mb_odometry_t array_odometry[100];
+int num_odometry = 9;
 int cnt_num_odom = 0;
 int optitrak_task = RTR_R1;
 int copy_switch = 0;
@@ -44,6 +44,7 @@ float init_phi = 0;
 float init_psi = 0;
 float target_psi = 0;
 float target_distance = 0;
+FILE* waypoints_file;
 
 int dsm_ch5 = 0, dsm_ch7 = 0;
 const float STRAIGHT_DISTANCE = 11.0; //meters 
@@ -169,6 +170,20 @@ float forward_velocity_control(mb_state_t* mb_state, float initial_phi, float di
 		return 0.0;
 	}else if(forward_velocity >= 0.4 * FWD_VEL_MAX) return 0.4 * FWD_VEL_MAX;
 	else return forward_velocity;
+}
+
+void read_waypoints(){
+	waypoints_file = fopen("waypoints.txt", "r");
+	if(waypoints_file){
+		fscanf(waypoints_file,"%d",&num_odometry);
+		int i;
+		float x,y;
+		for(i = 0; i<num_odometry; i++){
+			fscanf(waypoints_file,"%f",&x);
+			fscanf(waypoints_file,"%f",&y);
+			mb_odometry_init(&array_odometry[i], x, y, 0.0);
+		}
+	}
 }
 
 /*******************************************************************************
@@ -392,6 +407,8 @@ void balancebot_controller(){
 		if(init_switch){
 			/* initialize odometry to world coordinates 
 			   and generate all the waypoints */
+			//read_waypoints();
+			//mb_odometry_init(&mb_odometry,BBmsg.pose.x, BBmsg.pose.y, 0.0);
 			mb_odometry_init(&mb_odometry, 0.0, 0.0, 0.0); //Initialize to Optitrak coordinate
 			mb_state.psi_old = 0;
 			copy_switch = 1;
@@ -447,7 +464,7 @@ void balancebot_controller(){
 			case RTR_T:
 				mb_setpoints.fwd_velocity = forward_velocity_control(&mb_state, init_phi, target_distance);
 				if(mb_setpoints.fwd_velocity == 0){
-					if(abs(mb_state.phi-mb_state.phi_r) < 0.05){
+					if(abs(mb_state.phi-mb_state.phi_r) < 0.5){
 						copy_switch = 1;
 						optitrak_task = RTR_R1;
 						cnt_num_odom ++;
@@ -558,7 +575,7 @@ void* printf_loop(void* ptr){
 			printf("                 SENSORS               |");
 			printf("           ODOMETRY          |");
 			printf("           OPTITRAK          |");
-			//printf("                            PID                            |");
+			printf("                            PID                            |");
 			printf("\n");
 			printf("    θ    |");
 			printf("    φ    |");

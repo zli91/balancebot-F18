@@ -145,6 +145,13 @@ void printData(balancebot_msg_t BBmsg){
     if(BBmsg.num_gates > 0){
         printf("%+7.6f|"  ,(BBmsg.gates[0].left_post[0]+BBmsg.gates[0].right_post[0])/2.0);
         printf("%+7.6f|"  ,(BBmsg.gates[0].left_post[1]+BBmsg.gates[0].right_post[1])/2.0);
+        printf("%+7.6f|"  ,(BBmsg.gates[1].left_post[0]+BBmsg.gates[1].right_post[0])/2.0);
+        printf("%+7.6f|"  ,(BBmsg.gates[1].left_post[1]+BBmsg.gates[1].right_post[1])/2.0);
+        printf("%+7.6f|"  ,(BBmsg.gates[2].left_post[0]+BBmsg.gates[2].right_post[0])/2.0);
+        printf("%+7.6f|"  ,(BBmsg.gates[2].left_post[1]+BBmsg.gates[2].right_post[1])/2.0);
+        printf("%+7.6f|"  ,(BBmsg.gates[3].left_post[0]+BBmsg.gates[3].right_post[0])/2.0);
+        printf("%+7.6f|"  ,(BBmsg.gates[4].left_post[1]+BBmsg.gates[3].right_post[1])/2.0);
+
     }
     if(BBmsg.num_gates == 4){
         ptr_file = fopen("gates.txt","w");

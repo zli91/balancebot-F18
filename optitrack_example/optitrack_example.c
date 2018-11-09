@@ -160,7 +160,7 @@ void printData(balancebot_msg_t BBmsg){
         }else{
             int i = 0;
             for(i=0;i<4;i++){
-                fprintf(ptr_file,"%f\t%f\t%f\t%f\n",BBmsg.gates[i].left_post[0], BBmsg.gates[i].left_post[1], BBmsg.gates[i].right_post[0], BBmsg.gates[i].right_post[1]); 
+                fprintf(ptr_file,"%f\t%f\t%f\t%f\n",BBmsg.gates[i].left_post[0], -BBmsg.gates[i].left_post[1], BBmsg.gates[i].right_post[0], -BBmsg.gates[i].right_post[1]); 
             }
             fclose(ptr_file);
         }

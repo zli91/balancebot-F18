@@ -35,11 +35,13 @@
 
 rob_data_t rob_data;
 mb_odometry_t tmp_odometry;
-mb_odometry_t array_odometry[100];
-int num_odometry = 9;
+mb_odometry_t array_odometry[50];
+int num_odometry = 12;
 int cnt_num_odom = 0;
+int num_cycle = 0;
 int optitrak_task = RTR_R1;
 int copy_switch = 0;
+float body_angle_offset = 0;
 float init_phi = 0;
 float init_psi = 0;
 float target_psi = 0;
@@ -130,7 +132,6 @@ void robot_init(mb_state_t* mb_state, mb_setpoints_t* mb_setpoints, rob_data_t* 
 	mb_state-> yaw = 0;
 	mb_setpoints-> fwd_velocity = 0;
 	mb_setpoints-> turn_velocity = 0;
-
 }
 
 void position_init(){
@@ -151,7 +152,7 @@ float turn_velocity_control(mb_state_t* mb_state, float initial_psi, float final
 	else if(dpsi<-PI) final_psi += 2*PI;
 	dpsi = final_psi - initial_psi;
 	float psi_error = final_psi - mb_state->psi_old;
-	float turn_velocity = TURN_VEL_MAX * 1.0 * psi_error;
+	float turn_velocity = TURN_VEL_MAX * 1.2 * psi_error;
 	if( (dpsi >= 0 && psi_error <= 0.018) || (dpsi < 0 && psi_error >= -0.018)){
 		mb_state->psi_r = final_psi;
 		return 0.0;
@@ -176,12 +177,14 @@ void read_waypoints(){
 	waypoints_file = fopen("waypoints.txt", "r");
 	if(waypoints_file){
 		fscanf(waypoints_file,"%d",&num_odometry);
+		//printf("\n%d\n",num_odometry);
 		int i;
 		float x,y;
 		for(i = 0; i<num_odometry; i++){
 			fscanf(waypoints_file,"%f",&x);
 			fscanf(waypoints_file,"%f",&y);
 			mb_odometry_init(&array_odometry[i], x, y, 0.0);
+			//printf("%f\t%f\n",x,y);
 		}
 	}
 }
@@ -325,6 +328,7 @@ int main(){
 * 
 *
 *******************************************************************************/
+
 void balancebot_controller(){
 
 	//lock state mutex
@@ -407,33 +411,20 @@ void balancebot_controller(){
 		if(init_switch){
 			/* initialize odometry to world coordinates 
 			   and generate all the waypoints */
-			//read_waypoints();
-			//mb_odometry_init(&mb_odometry,BBmsg.pose.x, BBmsg.pose.y, 0.0);
-			mb_odometry_init(&mb_odometry, 0.0, 0.0, 0.0); //Initialize to Optitrak coordinate
-			mb_state.psi_old = 0;
+			read_waypoints();
+			if(num_cycle == 0){
+				mb_odometry_init(&mb_odometry,BBmsg.pose.x, BBmsg.pose.y, 0.0);
+				mb_state.psi_old = 0;
+				body_angle_offset = -BBmsg.pose.theta;
+			} 
+			else{
+				mb_odometry_init(&mb_odometry,BBmsg.pose.x, BBmsg.pose.y, BBmsg.pose.theta - body_angle_offset);
+				mb_state.psi_old = BBmsg.pose.theta - body_angle_offset;
+			}
+			//mb_odometry_init(&mb_odometry,0.0, 0.0, 0.0);
 			copy_switch = 1;
 			cnt_num_odom = 0;
 			optitrak_task = RTR_R1;
-			/*
-			mb_odometry_init(&array_odometry[0], 0.6, 0.0, 0.0);
-			mb_odometry_init(&array_odometry[1], 0.6, 0.6, 0.0);
-			mb_odometry_init(&array_odometry[2], 0.0, 0.6, 0.0);
-			mb_odometry_init(&array_odometry[3], 0.0, 0.0, 0.0);
-			mb_odometry_init(&array_odometry[4], 0.6, 0.0, 0.0);
-			mb_odometry_init(&array_odometry[5], 0.6, 0.6, 0.0);
-			mb_odometry_init(&array_odometry[6], 0.0, 0.6, 0.0);
-			mb_odometry_init(&array_odometry[7], 0.0, 0.0, 0.0);
-			*/
-			mb_odometry_init(&array_odometry[0], 1.2, 0.0, 0.0);
-			mb_odometry_init(&array_odometry[1], 1.5,-0.6, 0.0);
-			mb_odometry_init(&array_odometry[2], 2.7,-0.6, 0.0);
-			mb_odometry_init(&array_odometry[3], 2.7, 0.9, 0.0);
-			mb_odometry_init(&array_odometry[4], 1.8, 0.0, 0.0);
-			mb_odometry_init(&array_odometry[5], 1.5, 0.3, 0.0);
-			mb_odometry_init(&array_odometry[6], 1.5, 1.2, 0.0);
-			mb_odometry_init(&array_odometry[7], 0.9, 1.2, 0.0);
-			mb_odometry_init(&array_odometry[8], 0.9, 0.0, 0.0);
-			
 		}
 		if(copy_switch){
 			init_phi = mb_state.phi;
@@ -464,10 +455,15 @@ void balancebot_controller(){
 			case RTR_T:
 				mb_setpoints.fwd_velocity = forward_velocity_control(&mb_state, init_phi, target_distance);
 				if(mb_setpoints.fwd_velocity == 0){
-					if(abs(mb_state.phi-mb_state.phi_r) < 0.5){
+					if(abs(mb_state.phi-mb_state.phi_r) < 0.02){
 						copy_switch = 1;
 						optitrak_task = RTR_R1;
 						cnt_num_odom ++;
+						if(cnt_num_odom >= num_odometry){
+							cnt_num_odom = 0;
+							init_switch = 1;
+							num_cycle ++;
+						}
 					}
 				}
 				if(cnt_num_odom > num_odometry-1) optitrak_task = RTR_STOP; 
@@ -527,6 +523,7 @@ void* setpoint_control_loop(void* ptr){
 			}else if(dsm_ch7 == 0 && dsm_ch5 == -1){
 				/* Auto mode - initialize */
 				position_init();
+				num_cycle = 0;
 			}else if(dsm_ch7 == 1 && dsm_ch5 == 0){
 				/* Manual mode - Default */
 				mb_setpoints.manual_ctl = 1;
@@ -605,6 +602,7 @@ void* printf_loop(void* ptr){
 			printf("\r");
 			//Add Print stattements here, do not follow with /n
 			pthread_mutex_lock(&state_mutex);
+			
 			printf("%7.3f  |", mb_state.theta);
 			printf("%7.3f  |", mb_state.phi);
 			printf("%7d  |", mb_state.left_encoder);
@@ -621,7 +619,7 @@ void* printf_loop(void* ptr){
 			printf("%7.4f  |", rob_data.kp2);
 			printf("%7.4f  |", rob_data.ki2);
 			printf("%7.4f  |", rob_data.kd2);
-			//printf("%7.3f  |", mb_setpoints.fwd_velocity);
+			printf("%7.3f  |", mb_setpoints.fwd_velocity);
 			//printf("%7.4f  |", mb_state.yaw);
 			//printf("%7.4f  |", mb_state.psi_r);
 			//printf("%7.4f  |", (mb_state.left_cmd-mb_state.right_cmd)/2);

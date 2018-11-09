@@ -1,0 +1,46 @@
+#IncludeRegexLine: ^[ 	]*[#%][ 	]*(include|import)[ 	]*[<"]([^">]+)([">])
+
+#IncludeRegexScan: ^.*$
+
+#IncludeRegexComplain: ^$
+
+#IncludeRegexTransform: 
+
+/home/yueshen/Desktop/BalancebotPlan/astar.cpp
+astar.h
+/home/yueshen/Desktop/BalancebotPlan/astar.h
+
+/home/yueshen/Desktop/BalancebotPlan/astar.h
+iostream
+-
+iomanip
+-
+map
+-
+set
+-
+array
+-
+vector
+-
+utility
+-
+queue
+-
+tuple
+-
+algorithm
+-
+cstdlib
+-
+cmath
+-
+
+/home/yueshen/Desktop/BalancebotPlan/main.cpp
+astar.h
+/home/yueshen/Desktop/BalancebotPlan/astar.h
+iostream
+-
+fstream
+-
+

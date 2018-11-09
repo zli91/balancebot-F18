@@ -1,0 +1,1 @@
+/usr/bin/c++   -Wall -Werror -pedantic --std=c++11 -g   CMakeFiles/Astar.exe.dir/astar.cpp.o CMakeFiles/Astar.exe.dir/main.cpp.o  -o Astar.exe 

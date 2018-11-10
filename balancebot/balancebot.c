@@ -411,6 +411,7 @@ void balancebot_controller(){
 		if(init_switch){
 			/* initialize odometry to world coordinates 
 			   and generate all the waypoints */
+			printf("\nStart from here.\n");
 			read_waypoints();
 			if(num_cycle == 0){
 				mb_odometry_init(&mb_odometry,BBmsg.pose.x, BBmsg.pose.y, 0.0);
@@ -602,7 +603,7 @@ void* printf_loop(void* ptr){
 			printf("\r");
 			//Add Print stattements here, do not follow with /n
 			pthread_mutex_lock(&state_mutex);
-			
+			/*
 			printf("%7.3f  |", mb_state.theta);
 			printf("%7.3f  |", mb_state.phi);
 			printf("%7d  |", mb_state.left_encoder);
@@ -624,8 +625,8 @@ void* printf_loop(void* ptr){
 			//printf("%7.4f  |", mb_state.psi_r);
 			//printf("%7.4f  |", (mb_state.left_cmd-mb_state.right_cmd)/2);
 			//printf("%7.4f  |", rob_data.body_angle);
-			
-			//printf("%f\t%f\t%f\t%f\t\n", mb_odometry.x, mb_odometry.y, BBmsg.pose.x, BBmsg.pose.y );
+			*/
+			printf("%f\t%f\t%f\t%f\t\n", mb_odometry.x, mb_odometry.y, BBmsg.pose.x, BBmsg.pose.y );
 			pthread_mutex_unlock(&state_mutex);
 			fflush(stdout);
 		}

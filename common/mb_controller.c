@@ -121,7 +121,7 @@ int mb_controller_update(mb_state_t* mb_state, mb_setpoints_t* mb_setpoints, mb_
 
     // Inner Loop
     controller_set_pid(&inner_loop, rob_data->kp1, rob_data->ki1, rob_data->kd1, 0.0002222, DT);
-    float duty = controller_march(&inner_loop, theta_r - mb_state->theta , -1.0, 1.0);
+    float duty = controller_march(&inner_loop, theta_r- mb_state->theta , -1.0, 1.0);
 
     // Turning Loop
     controller_set_pid(&turning_loop, rob_data->kp3, rob_data->ki3, rob_data->kd3, 0.01, DT);

@@ -49,7 +49,7 @@ float target_distance = 0;
 FILE* waypoints_file;
 
 int dsm_ch5 = 0, dsm_ch7 = 0;
-const float STRAIGHT_DISTANCE = 11.0; //meters 
+const float STRAIGHT_DISTANCE = 10.5; //meters 
 float left_turn_distance = 1.0; // meters
 const float FWD_VEL_MAX = 0.8;
 const float TURN_VEL_MAX = 4;
@@ -121,9 +121,9 @@ void robot_init(mb_state_t* mb_state, mb_setpoints_t* mb_setpoints, rob_data_t* 
     rob_data-> ki2 = -0.0208;//-0.0021;
     rob_data-> kd2 = -0.0106;//-0.0133;
     
-    rob_data-> kp3 = -2.0;
+    rob_data-> kp3 = -0.5;//-2.0
     rob_data-> ki3 = -0.4;
-    rob_data-> kd3 = -0.04;
+    rob_data-> kd3 = -0.005;//-0.04
 
     rob_data-> body_angle = 0.023;
 
@@ -335,7 +335,7 @@ void balancebot_controller(){
 	pthread_mutex_lock(&state_mutex);
 	
 	// Read IMU
-	mb_state.theta = mpu_data.dmp_TaitBryan[TB_PITCH_X] - rob_data.body_angle;
+	mb_state.theta = mpu_data.dmp_TaitBryan[TB_PITCH_X]-0.023;//; - rob_data.body_angle;
 	mb_state.prev_yaw = mb_state.yaw;
 	mb_state.yaw = mpu_data.dmp_TaitBryan[TB_YAW_Z];
 
@@ -373,33 +373,57 @@ void balancebot_controller(){
 	}else if(dsm_ch7 == -1 && dsm_ch5 == 1){
 		/* Task mode - 4 Left Turns */
 		mb_setpoints.manual_ctl = 0;
-		if(init_switch)	mb_odometry_copy(&tmp_odometry, &mb_odometry);
+		if(init_switch){
+			mb_odometry_copy(&tmp_odometry, &mb_odometry);
+			printf("FORWARD START\n");
+		}	
 		init_switch = 0;
 		switch (left_turn_task)
 		{
 			case ROB_FORWARD:
 				distance = mb_odometry_distance(&mb_odometry, &tmp_odometry);
-				if(left_turn_count == 0) left_turn_distance = 0.85;
+				if(left_turn_count == 0) left_turn_distance = 1.0;
 				else if (left_turn_count == 3) left_turn_distance = 1.0;
-				else left_turn_distance = 0.80;
-				if(distance >= left_turn_distance){
-					mb_setpoints.fwd_velocity = FWD_VEL_MAX * 0.3;
-					left_turn_count ++;
-					if(left_turn_count >= 4){
-						left_turn_task = ROB_STOP;
-						left_turn_count = 0;
-					} 
-					else left_turn_task = ROB_TURN;
-				}else mb_setpoints.fwd_velocity = FWD_VEL_MAX * 0.5;
+				else left_turn_distance = 1.0;
+				if(distance - left_turn_distance >= -0.05){
+					mb_setpoints.fwd_velocity = 0;//FWD_VEL_MAX * 0.3;
+					if(fabs(distance - left_turn_distance)<=0.0025){
+						left_turn_count ++;
+						if(left_turn_count >= 4){
+							left_turn_task = ROB_STOP;
+							printf("STOP\n");
+							left_turn_count = 0;
+						} 
+						else{
+							left_turn_task = ROB_TURN;
+							printf("FORWARD COMPLETE START TURNING\n");
+						} 
+					}
+				}else mb_setpoints.fwd_velocity = FWD_VEL_MAX * 0.4;
 				break;
 			case ROB_TURN:
-				if(mb_state.psi_r - tmp_odometry.psi >= PI/2){
-					mb_state.psi_r = tmp_odometry.psi + PI/2;
-					mb_setpoints.turn_velocity = 0;
+			
+				mb_state.psi_old = tmp_odometry.psi - PI/2;
+				mb_state.psi_r = tmp_odometry.psi - PI/2;
+				mb_setpoints.turn_velocity = 0;
+				if(fabs(mb_state.psi_r - mb_odometry.psi) <= 0.005){
 					init_switch = 1;
 					left_turn_task = ROB_FORWARD;
+				}
+				break;
+			
+				/*
+				if(mb_state.psi_old - tmp_odometry.psi >= 0.49 * PI){
+					mb_state.psi_old = tmp_odometry.psi + PI/2;
+					mb_state.psi_r = tmp_odometry.psi + PI/2;
+					mb_setpoints.turn_velocity = 0;
+					if(fabs(mb_state.psi_r - mb_odometry.psi)<=0.005){
+						init_switch = 1;
+						left_turn_task = ROB_FORWARD;
+					}
 				}else mb_setpoints.turn_velocity = TURN_VEL_MAX * 0.70;
 				break;
+				*/
 			case ROB_STOP:
 				mb_setpoints.fwd_velocity = 0;
 				mb_setpoints.turn_velocity = 0;
@@ -531,7 +555,8 @@ void* setpoint_control_loop(void* ptr){
 				mb_setpoints.fwd_velocity = FWD_VEL_MAX * rc_dsm_ch_normalized(3);
 				mb_setpoints.turn_velocity = TURN_VEL_MAX * rc_dsm_ch_normalized(4);
 				//rob_data.body_angle = 0.1 * rc_dsm_ch_normalized(1);
-				// mb_setpoints.psi_r = PI/2 * rc_dsm_ch_normalized(4);
+
+
 			}else if(dsm_ch7 == 1 && dsm_ch5 == -1){
 				/* Manual mode - Tune Outer Loop */
 				mb_setpoints.manual_ctl = 1;
@@ -626,7 +651,10 @@ void* printf_loop(void* ptr){
 			//printf("%7.4f  |", (mb_state.left_cmd-mb_state.right_cmd)/2);
 			//printf("%7.4f  |", rob_data.body_angle);
 			*/
-			printf("%f\t%f\t%f\t%f\t\n", mb_odometry.x, mb_odometry.y, BBmsg.pose.x, BBmsg.pose.y );
+			printf("%7.3f\t%7.3f\t%7.3f\t%7.3f\n", mb_odometry.x, mb_odometry.y, BBmsg.pose.x, BBmsg.pose.y);
+			//printf("%7.3f  \n", mb_state.phi);
+			//printf("%7.3f \t %7.3f \n", mb_odometry.psi, mb_state.psi_r);
+			//printf("%7.3f \t %7.3f  \n", mb_state.theta, rob_data.body_angle);
 			pthread_mutex_unlock(&state_mutex);
 			fflush(stdout);
 		}

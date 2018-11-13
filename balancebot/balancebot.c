@@ -488,6 +488,7 @@ void balancebot_controller(){
 							cnt_num_odom = 0;
 							init_switch = 1;
 							num_cycle ++;
+							printf("FINISHED CYCLE\n");
 						}
 					}
 				}
